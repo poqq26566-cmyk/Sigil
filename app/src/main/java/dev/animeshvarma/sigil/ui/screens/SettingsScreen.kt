@@ -16,7 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
@@ -31,16 +31,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalDensity
-import androidx.core.graphics.toColorInt
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.ui.components.SigilSegmentedControl
+import dev.animeshvarma.sigil.util.BiometricHelper
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -73,9 +72,11 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var showPinDialog by remember { mutableStateOf(false) }
     var showViewPinDialog by remember { mutableStateOf(false) }
     var showColorDialog by remember { mutableStateOf(false) }
+    var showSecurityErrorDialog by remember { mutableStateOf(false) }
     var revealedPin by remember { mutableStateOf("") }
 
     var isPinLoading by remember { mutableStateOf(false) }
+    var isSavingPin by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -127,8 +128,17 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 Switch(
                     checked = lockMode != LockMode.NONE,
                     onCheckedChange = { enabled ->
-                        lockMode = if (enabled) LockMode.DEVICE else LockMode.NONE
-                        viewModel.setLockMode(lockMode)
+                        if (enabled) {
+                            if (BiometricHelper.isDeviceSecure(context)) {
+                                lockMode = LockMode.DEVICE
+                                viewModel.setLockMode(LockMode.DEVICE)
+                            } else {
+                                showSecurityErrorDialog = true
+                            }
+                        } else {
+                            lockMode = LockMode.NONE
+                            viewModel.setLockMode(LockMode.NONE)
+                        }
                     }
                 )
             }
@@ -143,8 +153,13 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     selectedIndex = if (lockMode == LockMode.CUSTOM) 1 else 0,
                     onItemSelection = { index ->
                         if (index == 0) {
-                            lockMode = LockMode.DEVICE
-                            viewModel.setLockMode(LockMode.DEVICE)
+                            // Double check if switching back to Device
+                            if (BiometricHelper.isDeviceSecure(context)) {
+                                lockMode = LockMode.DEVICE
+                                viewModel.setLockMode(LockMode.DEVICE)
+                            } else {
+                                showSecurityErrorDialog = true
+                            }
                         } else {
                             // Trigger Dialog for PIN
                             showPinDialog = true
@@ -222,7 +237,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
         SettingsItem(
             title = "Screen Shield",
-            desc = "Block screenshots and hide content in Recents.",
+            desc = "Block screenshots and hide content in Recents. (Requires Restart)",
             trailing = {
                 Switch(checked = screenShield, onCheckedChange = {
                     screenShield = it
@@ -236,16 +251,12 @@ fun SettingsScreen(viewModel: SigilViewModel) {
         // --- APPEARANCE ---
         SettingsHeader("Appearance")
 
-        SettingsItem(
-            title = "Material You",
-            desc = "Use system wallpaper colors.",
-            trailing = {
-                Switch(checked = dynamicColors, onCheckedChange = {
-                    dynamicColors = it
-                    viewModel.setDynamicColors(it)
-                })
-            }
-        )
+        SettingsItem("Material You", "Use system wallpaper colors. (Requires Restart)") {
+            Switch(checked = dynamicColors, onCheckedChange = {
+                dynamicColors = it
+                viewModel.setDynamicColors(it)
+            })
+        }
 
         AnimatedVisibility(visible = !dynamicColors) {
             Column {
@@ -253,62 +264,93 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
                 // THEME COLOR SELECTOR
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .clickable { showColorDialog = true }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable { showColorDialog = true }.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Accent Color", fontWeight = FontWeight.Medium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "#${Integer.toHexString(selectedColorInt).uppercase().takeLast(6)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text("#${Integer.toHexString(selectedColorInt).uppercase().takeLast(6)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(12.dp))
-                        Box(
-                            Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .background(Color(selectedColorInt))
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        )
+                        Box(Modifier.size(24.dp).clip(CircleShape).background(Color(selectedColorInt)).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
                     }
                 }
-
                 Spacer(Modifier.height(16.dp))
-                SettingsItem("Dark Mode", "Use dark theme layout.") {
-                    Switch(checked = darkMode, onCheckedChange = { darkMode = it; viewModel.setDarkMode(it) })
+
+                // DARK MODE (Moved inside this block - Hidden if Dynamic Colors is ON)
+                SettingsItem("Dark Mode", "Force dark theme. (Requires Restart)") {
+                    Switch(checked = darkMode, onCheckedChange = {
+                        darkMode = it
+                        viewModel.setDarkMode(it)
+                    })
                 }
             }
         }
+
         Spacer(Modifier.height(64.dp))
     }
 
     // --- DIALOGS ---
 
+    // Security Error Dialog
+    if (showSecurityErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showSecurityErrorDialog = false },
+            icon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Device Security Not Set") },
+            text = { Text("Your device doesn't have a Screen Lock (PIN, Pattern, or Password) enabled.\n\nTo use App Lock, please set a 'Custom PIN' for Sigil.") },
+            confirmButton = {
+                Button(onClick = {
+                    showSecurityErrorDialog = false
+                    showPinDialog = true // Direct to Custom PIN
+                }) { Text("Set Custom PIN") }
+            },
+            dismissButton = { TextButton(onClick = { showSecurityErrorDialog = false }) { Text("Cancel") } }
+        )
+    }
+
     // Set PIN Dialog
     if (showPinDialog) {
         var pinInput by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode },
+            onDismissRequest = { if(!isSavingPin) { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode } },
             icon = { Icon(Icons.Default.Lock, null) },
             title = { Text("Set Custom PIN") },
             text = {
                 Column {
-                    Text("Enter a PIN to lock Sigil. It will be encrypted in the Hardware Vault.")
+                    Text("Enter a PIN to lock Sigil.")
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(value = pinInput, onValueChange = { if (it.length <= 12) pinInput = it }, label = { Text("PIN") }, singleLine = true)
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.length <= 12) pinInput = it },
+                        label = { Text("PIN") },
+                        singleLine = true,
+                        enabled = !isSavingPin
+                    )
                 }
             },
             confirmButton = {
-                Button(onClick = { if (pinInput.isNotEmpty()) { viewModel.setCustomPin(pinInput); lockMode = LockMode.CUSTOM; viewModel.setLockMode(LockMode.CUSTOM); showPinDialog = false } }) { Text("Set PIN") }
+                Button(
+                    onClick = {
+                        if (pinInput.isNotEmpty()) {
+                            isSavingPin = true
+                            viewModel.setCustomPin(pinInput)
+                            lockMode = LockMode.CUSTOM
+                            viewModel.setLockMode(LockMode.CUSTOM)
+                            showPinDialog = false
+                            isSavingPin = false
+                        }
+                    },
+                    enabled = !isSavingPin
+                ) {
+                    if (isSavingPin) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Set PIN")
+                }
             },
-            dismissButton = { TextButton(onClick = { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(
+                    onClick = { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode },
+                    enabled = !isSavingPin
+                ) { Text("Cancel") }
+            }
         )
     }
 
@@ -351,6 +393,13 @@ fun AdvancedColorPickerDialog(
 ) {
     var currentColor by remember { mutableStateOf(initialColor) }
 
+    // HSV State
+    val hsv = remember {
+        val arr = FloatArray(3)
+        android.graphics.Color.colorToHSV(initialColor.toArgb(), arr)
+        mutableStateOf(arr)
+    }
+
     // Inputs
     var hexInput by remember { mutableStateOf(Integer.toHexString(initialColor.toArgb()).uppercase().takeLast(6)) }
     var rInput by remember { mutableStateOf((initialColor.red * 255).toInt().toString()) }
@@ -370,6 +419,7 @@ fun AdvancedColorPickerDialog(
             if (hex.length == 6) {
                 val color = Color(android.graphics.Color.parseColor("#$hex"))
                 currentColor = color
+                android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
             }
         } catch (e: Exception) { }
     }
@@ -382,6 +432,7 @@ fun AdvancedColorPickerDialog(
             val color = Color(ri.coerceIn(0,255), gi.coerceIn(0,255), bi.coerceIn(0,255))
             currentColor = color
             hexInput = Integer.toHexString(color.toArgb()).uppercase().takeLast(6)
+            android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
         } catch (e: Exception) { }
     }
 
@@ -402,14 +453,8 @@ fun AdvancedColorPickerDialog(
                     val maxWidthPx = with(density) { maxWidth.toPx() }
                     val radiusPx = maxWidthPx / 2f
 
-                    // Derive Thumb Position from Current Color
-                    val hsv = FloatArray(3)
-                    android.graphics.Color.colorToHSV(currentColor.toArgb(), hsv)
-
-                    val angleRad = Math.toRadians(hsv[0].toDouble())
-                    val dist = hsv[1] * (maxWidth.value / 2f)
-
-                    // X = Center + (Cos(angle) * dist)
+                    val angleRad = Math.toRadians(hsv.value[0].toDouble())
+                    val dist = hsv.value[1] * (maxWidth.value / 2f)
                     val thumbX = (cos(angleRad) * dist).dp
                     val thumbY = (sin(angleRad) * dist).dp
 
@@ -420,18 +465,14 @@ fun AdvancedColorPickerDialog(
                                 detectDragGestures { change, _ ->
                                     val center = Offset(size.width / 2f, size.height / 2f)
                                     val delta = change.position - center
-
                                     val angle = (atan2(delta.y, delta.x) * (180 / Math.PI) + 360) % 360
                                     val distance = hypot(delta.x, delta.y)
                                     val saturation = (distance / radiusPx).coerceIn(0f, 1f)
 
-                                    val newColor = Color.hsv(angle.toFloat(), saturation, 1f)
-                                    // Update inputs
-                                    currentColor = newColor
-                                    hexInput = Integer.toHexString(newColor.toArgb()).uppercase().takeLast(6)
-                                    rInput = (newColor.red * 255).toInt().toString()
-                                    gInput = (newColor.green * 255).toInt().toString()
-                                    bInput = (newColor.blue * 255).toInt().toString()
+                                    hsv.value[0] = angle.toFloat()
+                                    hsv.value[1] = saturation
+                                    val newColor = Color.hsv(hsv.value[0], hsv.value[1], hsv.value[2])
+                                    updateInputs(newColor)
                                 }
                             }
                             .pointerInput(Unit) {
@@ -442,29 +483,17 @@ fun AdvancedColorPickerDialog(
                                     val distance = hypot(delta.x, delta.y)
                                     val saturation = (distance / radiusPx).coerceIn(0f, 1f)
 
-                                    val newColor = Color.hsv(angle.toFloat(), saturation, 1f)
-                                    // Update inputs
-                                    currentColor = newColor
-                                    hexInput = Integer.toHexString(newColor.toArgb()).uppercase().takeLast(6)
-                                    rInput = (newColor.red * 255).toInt().toString()
-                                    gInput = (newColor.green * 255).toInt().toString()
-                                    bInput = (newColor.blue * 255).toInt().toString()
+                                    hsv.value[0] = angle.toFloat()
+                                    hsv.value[1] = saturation
+                                    val newColor = Color.hsv(hsv.value[0], hsv.value[1], hsv.value[2])
+                                    updateInputs(newColor)
                                 }
                             }
                     ) {
-                        drawCircle(
-                            brush = Brush.sweepGradient(
-                                listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)
-                            )
-                        )
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                listOf(Color.White, Color.Transparent)
-                            )
-                        )
+                        drawCircle(brush = Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                        drawCircle(brush = Brush.radialGradient(listOf(Color.White, Color.Transparent)))
                     }
 
-                    // THE THUMB
                     Box(
                         modifier = Modifier
                             .offset(x = thumbX, y = thumbY)
@@ -476,9 +505,23 @@ fun AdvancedColorPickerDialog(
                     )
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
-                // 2. HEX INPUT
+                // 2. BRIGHTNESS SLIDER
+                Text("Brightness: ${(hsv.value[2] * 100).toInt()}%", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Slider(
+                    value = hsv.value[2],
+                    onValueChange = {
+                        hsv.value[2] = it
+                        val newColor = Color.hsv(hsv.value[0], hsv.value[1], hsv.value[2])
+                        updateInputs(newColor)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                // 3. HEX INPUT
                 OutlinedTextField(
                     value = hexInput,
                     onValueChange = {
@@ -496,7 +539,7 @@ fun AdvancedColorPickerDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // 3. RGB INPUTS
+                // 4. RGB INPUTS
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RGBField("R", rInput) { rInput = it; updateFromRGB(it, gInput, bInput) }
                     RGBField("G", gInput) { gInput = it; updateFromRGB(rInput, it, bInput) }

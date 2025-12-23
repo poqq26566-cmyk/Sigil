@@ -2,42 +2,105 @@ package dev.animeshvarma.sigil
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
-import dev.animeshvarma.sigil.ui.SigilApp
+import dev.animeshvarma.sigil.data.LockManager
 import dev.animeshvarma.sigil.ui.OnboardingOrchestrator
+import dev.animeshvarma.sigil.ui.SigilApp
+import dev.animeshvarma.sigil.ui.screens.LockScreen
 import dev.animeshvarma.sigil.ui.theme.SigilTheme
 import dev.animeshvarma.sigil.util.SigilPreferences
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var lockManager: LockManager
+    private lateinit var viewModel: SigilViewModel
+    private lateinit var prefs: SigilPreferences
+
+    private val isLockedState = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val viewModel = ViewModelProvider(this)[SigilViewModel::class.java]
-        val prefs = SigilPreferences(this)
+        viewModel = ViewModelProvider(this)[SigilViewModel::class.java]
+        prefs = SigilPreferences(this)
+        lockManager = LockManager(this)
+
+        // 1. SECURE WINDOW IMMEDIATELY (Visual Hardening)
+        if (prefs.isScreenShieldEnabled) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        }
+
+        // 2. Initial Lock Logic
+        if (lockManager.isAppLocked()) {
+            isLockedState.value = true
+        }
+
+        // 3. Lifecycle Enforcer
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    lockManager.recordBackgroundEvent()
+                    if (prefs.isScreenShieldEnabled) {
+                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    if (prefs.isScreenShieldEnabled) {
+                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+
+                    if (lockManager.isAppLocked()) {
+                        isLockedState.value = true
+                        // AMNESIA PROTOCOL
+                        viewModel.clearSensitiveData()
+                    }
+                }
+                else -> {}
+            }
+        })
 
         val showOnboarding = mutableStateOf(!prefs.hasCompletedOnboarding())
 
         checkAndProcessIntent(intent, viewModel)
 
         setContent {
-            SigilTheme {
+            val systemDark = isSystemInDarkTheme()
+            val useDarkTheme = if (prefs.isDynamicColorsEnabled) systemDark else prefs.isDarkModeEnabled
+
+            SigilTheme(
+                darkTheme = useDarkTheme,
+                dynamicColor = prefs.isDynamicColorsEnabled,
+                seedColor = prefs.selectedThemeColor
+            ) {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
                         SigilApp(viewModel = viewModel)
 
-                        if (showOnboarding.value) {
+                        if (isLockedState.value) {
+                            LockScreen(
+                                viewModel = viewModel,
+                                onUnlock = { isLockedState.value = false }
+                            )
+                        }
+
+                        if (!isLockedState.value && showOnboarding.value) {
                             OnboardingOrchestrator(
                                 viewModel = viewModel,
                                 onComplete = {

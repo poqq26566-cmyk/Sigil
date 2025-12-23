@@ -87,4 +87,8 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+
 }

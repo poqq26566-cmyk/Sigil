@@ -1,17 +1,19 @@
 package dev.animeshvarma.sigil
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import android.content.Context
+import android.content.Intent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.data.KeystoreRepository
-import dev.animeshvarma.sigil.data.VaultEntry
 import dev.animeshvarma.sigil.data.LockManager
-import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.data.VaultEntry
 import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.LayerEntry
+import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.util.SecureMemory
@@ -25,6 +27,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.system.exitProcess
 
 class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -427,10 +430,38 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setCustomPin(pin: String) {
+        // TRIGGER GLOBAL LOADING
+        _uiState.update { it.copy(isLoading = true) }
+
         viewModelScope.launch(Dispatchers.IO) {
             lockManager.setCustomPin(pin)
+
+            // Simulating a small delay for UX so the loader is visible
+            kotlinx.coroutines.delay(500)
+
             withContext(Dispatchers.Main) {
                 addLog("Custom Security PIN set (TEE Encrypted).")
+                // STOP LOADING
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+    fun verifyAppPin(input: String, onResult: (Boolean) -> Unit) {
+        // TRIGGER GLOBAL LOADING
+        _uiState.update { it.copy(isLoading = true) }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val isValid = lockManager.verifyPin(input)
+
+            // Delay for UX feedback
+            if (!isValid) kotlinx.coroutines.delay(500)
+
+            // STOP LOADING
+            _uiState.update { it.copy(isLoading = false) }
+
+            withContext(Dispatchers.Main) {
+                onResult(isValid)
             }
         }
     }
@@ -440,6 +471,29 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             val pin = lockManager.getStoredPin()
             withContext(Dispatchers.Main) {
                 onResult(pin)
+            }
+        }
+    }
+
+    fun wipeAllData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Nuke Preferences files directly
+            val context = getApplication<Application>()
+
+            // Clear SigilPrefs
+            context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+            // Clear Vault Data
+            context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE).edit().clear().commit()
+
+            withContext(Dispatchers.Main) {
+                // Restart App Process to reset all state
+                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
+                exitProcess(0)
             }
         }
     }
