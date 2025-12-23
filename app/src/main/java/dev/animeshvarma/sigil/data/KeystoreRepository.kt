@@ -27,6 +27,7 @@ class KeystoreRepository(context: Context) {
 
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private val prefs: SharedPreferences = context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE)
+    private val INTERNAL_PREFIX = "_SIGIL_"
 
     // Constants
     private val HARDWARE_ALIAS = "SIGIL_HARDWARE_WRAPPER"
@@ -200,6 +201,7 @@ class KeystoreRepository(context: Context) {
             .filter { it.startsWith("DATA_") }
             .map { key ->
                 val alias = key.removePrefix("DATA_")
+                if (alias.startsWith(INTERNAL_PREFIX)) return@map null
                 VaultEntry(
                     alias = alias,
                     timestamp = prefs.getLong("TIME_$alias", 0L),
@@ -207,6 +209,7 @@ class KeystoreRepository(context: Context) {
                     strengthLabel = prefs.getString("LABEL_$alias", "") ?: ""
                 )
             }
+            .filterNotNull()
             .sortedByDescending { it.timestamp }
     }
 

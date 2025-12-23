@@ -3,9 +3,13 @@ package dev.animeshvarma.sigil
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.data.KeystoreRepository
 import dev.animeshvarma.sigil.data.VaultEntry
+import dev.animeshvarma.sigil.data.LockManager
+import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.LayerEntry
 import dev.animeshvarma.sigil.model.SigilMode
@@ -27,6 +31,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = KeystoreRepository(application)
     private val prefs = SigilPreferences(application)
     private val _uiState = MutableStateFlow(UiState())
+    private val lockManager = LockManager(application)
     val uiState: StateFlow<UiState> = _uiState
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
@@ -416,4 +421,36 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             addLog("Onboarding disabled.")
         }
     }
+    // --- SECURITY SETTINGS ---
+    fun setLockMode(mode: LockMode) {
+        prefs.lockMode = mode
+    }
+
+    fun setCustomPin(pin: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            lockManager.setCustomPin(pin)
+            withContext(Dispatchers.Main) {
+                addLog("Custom Security PIN set (TEE Encrypted).")
+            }
+        }
+    }
+
+    fun retrieveAppPin(onResult: (String?) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pin = lockManager.getStoredPin()
+            withContext(Dispatchers.Main) {
+                onResult(pin)
+            }
+        }
+    }
+
+    // --- APPEARANCE SETTINGS ---
+    fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }
+    fun setDarkMode(enabled: Boolean) { prefs.isDarkModeEnabled = enabled }
+    fun setThemeColor(color: Color) {
+        prefs.selectedThemeColor = color.toArgb()
+    }
+
+    // --- ACCESSORS for UI (to initialize state) ---
+    fun getPrefs() = prefs
 }

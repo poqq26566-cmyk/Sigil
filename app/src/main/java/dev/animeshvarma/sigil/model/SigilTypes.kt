@@ -7,6 +7,12 @@ enum class SigilMode {
     AUTO, CUSTOM
 }
 
+enum class LockMode {
+    NONE,
+    DEVICE,
+    CUSTOM
+}
+
 enum class AppScreen(val title: String) {
     HOME("Home"),
     HEADERLESS("Headerless Mode"),
