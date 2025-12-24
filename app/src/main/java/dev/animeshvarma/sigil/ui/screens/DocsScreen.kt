@@ -118,7 +118,7 @@ fun ReleasesContent() {
         // --- v0.4 (ONBOARDING & ACCESS CONTROL) ---
         ReleaseData(
             version = "v0.4",
-            title = "Onboarding and Access Control",
+            title = "Onboarding & Access Control",
             tag = "Current Build",
             categories = listOf(
                 ReleaseCategory(
