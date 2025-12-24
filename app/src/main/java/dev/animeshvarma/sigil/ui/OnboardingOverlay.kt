@@ -2,6 +2,7 @@ package dev.animeshvarma.sigil.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,29 +12,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.SigilMode
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 enum class OnboardingState {
     START_SCREEN,
     BASIC_INTRO, BASIC_INPUT, BASIC_PASS, BASIC_ENCRYPT_WAIT, BASIC_ENCRYPT_DONE, BASIC_OUTPUT,
     DECRYPT_PREP, DECRYPT_WAIT, DECRYPT_DONE,
+    DRAWER_SHOW,
     KEYSTORE_NAV, KEYSTORE_EXPLAIN, KEYSTORE_USAGE,
+    SETTINGS_NAV, SETTINGS_EXPLAIN,
     FORK_SELECTION,
-    ADV_CUSTOM_INTRO, ADV_CUSTOM_LAYERS, ADV_CUSTOM_REORDER,
-    ADV_BLOB_EXPLAIN,
-    ADV_LOGS_PREP,
-    ADV_LOGS_VIEW,
-    ADV_RELEASES,
+    ADV_CUSTOM_INTRO, ADV_CUSTOM_LAYERS, ADV_CUSTOM_REORDER, ADV_BLOB_EXPLAIN,
+    ADV_LOGS_PREP, ADV_LOGS_VIEW, ADV_RELEASES,
     FINISHED
 }
 
-// Demo Text Constant
 private const val DEMO_LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque semper, nisi ac cursus vulputate, diam est cursus nibh, non suscipit lorem libero vitae metus. Donec pharetra lectus id erat aliquet, eu volutpat felis condimentum."
 
 @Composable
@@ -45,10 +47,8 @@ fun OnboardingOrchestrator(
 
     LaunchedEffect(state) {
         delay(100)
-
         when (state) {
             OnboardingState.START_SCREEN -> { /* Static */ }
-
             OnboardingState.BASIC_INTRO -> {
                 viewModel.setDemoMode(true)
                 viewModel.onScreenSelected(AppScreen.HOME)
@@ -57,22 +57,23 @@ fun OnboardingOrchestrator(
             }
             OnboardingState.BASIC_INPUT -> viewModel.injectDemoData(DEMO_LOREM, "", "")
             OnboardingState.BASIC_PASS -> viewModel.injectDemoData(DEMO_LOREM, "BlueHorse", "")
-
-            OnboardingState.BASIC_ENCRYPT_WAIT -> { /* Wait */ }
-            OnboardingState.BASIC_ENCRYPT_DONE -> {
-                viewModel.onEncrypt()
-            }
-
+            OnboardingState.BASIC_ENCRYPT_WAIT -> { }
+            OnboardingState.BASIC_ENCRYPT_DONE -> { viewModel.onEncrypt() }
             OnboardingState.DECRYPT_PREP -> {
                 val output = viewModel.uiState.value.autoOutput
                 viewModel.injectDemoData(output, "BlueHorse", "")
             }
-            OnboardingState.DECRYPT_WAIT -> { /* Wait */ }
-            OnboardingState.DECRYPT_DONE -> {
-                viewModel.onDecrypt()
+            OnboardingState.DECRYPT_WAIT -> { }
+            OnboardingState.DECRYPT_DONE -> { viewModel.onDecrypt() }
+
+            OnboardingState.DRAWER_SHOW -> {
+                viewModel.onScreenSelected(AppScreen.HOME)
+                delay(300)
+                viewModel.toggleDemoDrawer(true)
             }
 
             OnboardingState.KEYSTORE_NAV -> {
+                viewModel.toggleDemoDrawer(false)
                 viewModel.injectDemoVault()
                 viewModel.onScreenSelected(AppScreen.KEYSTORE)
             }
@@ -81,9 +82,17 @@ fun OnboardingOrchestrator(
                 delay(500)
                 viewModel.toggleDemoDropdown(true)
             }
+            OnboardingState.SETTINGS_NAV -> {
+                viewModel.toggleDemoDropdown(false)
+                viewModel.onScreenSelected(AppScreen.SETTINGS)
+            }
+            OnboardingState.SETTINGS_EXPLAIN -> { }
+
+            OnboardingState.FORK_SELECTION -> {
+                viewModel.onScreenSelected(AppScreen.HOME)
+            }
 
             OnboardingState.ADV_CUSTOM_INTRO -> {
-                viewModel.toggleDemoDropdown(false)
                 viewModel.onScreenSelected(AppScreen.HOME)
                 viewModel.onModeSelected(SigilMode.CUSTOM)
                 viewModel.injectDemoData("Launch Codes", "RedBattery", "")
@@ -92,21 +101,13 @@ fun OnboardingOrchestrator(
                 delay(500)
                 viewModel.demoSwapLayers()
             }
-
-            // Logs Step
-            OnboardingState.ADV_LOGS_PREP -> {
-                if (viewModel.uiState.value.showLogsDialog) viewModel.onLogsClicked()
-            }
-            OnboardingState.ADV_LOGS_VIEW -> {
-                if (!viewModel.uiState.value.showLogsDialog) viewModel.onLogsClicked()
-            }
-
+            OnboardingState.ADV_LOGS_PREP -> { if (viewModel.uiState.value.showLogsDialog) viewModel.onLogsClicked() }
+            OnboardingState.ADV_LOGS_VIEW -> { if (!viewModel.uiState.value.showLogsDialog) viewModel.onLogsClicked() }
             OnboardingState.ADV_RELEASES -> {
                 if (viewModel.uiState.value.showLogsDialog) viewModel.onLogsClicked()
                 viewModel.onScreenSelected(AppScreen.DOCS)
                 viewModel.setDocsTab(1)
             }
-
             OnboardingState.FINISHED -> {
                 viewModel.setDemoMode(false)
                 onComplete()
@@ -119,22 +120,30 @@ fun OnboardingOrchestrator(
 
         if (state == OnboardingState.START_SCREEN) {
             Box(
-                Modifier.fillMaxSize().background(Color.Black).padding(32.dp),
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(32.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Security, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(32.dp))
-                    Text("SIGIL", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text("SIGIL", color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(16.dp))
-                    Text("A Zero-Trust Encryption Environment", color = Color.Gray)
+                    Text("A Zero-Trust Encryption Environment", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(64.dp))
+
                     Button(
                         onClick = { state = OnboardingState.BASIC_INTRO },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text("Start Tour")
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    TextButton(onClick = { state = OnboardingState.FINISHED }) {
+                        Text("Skip Intro", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -144,6 +153,9 @@ fun OnboardingOrchestrator(
                 onFinish = { state = OnboardingState.FINISHED },
                 onAdvanced = { state = OnboardingState.ADV_CUSTOM_INTRO }
             )
+        }
+        else if (state == OnboardingState.FINISHED) {
+            Box(Modifier.fillMaxSize())
         }
         else {
             Box(modifier = Modifier.fillMaxSize().clickable(enabled = true, onClick = {}))
@@ -159,11 +171,16 @@ fun OnboardingOrchestrator(
 
                     OnboardingState.DECRYPT_PREP -> OnboardingState.DECRYPT_WAIT
                     OnboardingState.DECRYPT_WAIT -> OnboardingState.DECRYPT_DONE
-                    OnboardingState.DECRYPT_DONE -> OnboardingState.KEYSTORE_NAV
+                    OnboardingState.DECRYPT_DONE -> OnboardingState.DRAWER_SHOW
+
+                    OnboardingState.DRAWER_SHOW -> OnboardingState.KEYSTORE_NAV
 
                     OnboardingState.KEYSTORE_NAV -> OnboardingState.KEYSTORE_EXPLAIN
                     OnboardingState.KEYSTORE_EXPLAIN -> OnboardingState.KEYSTORE_USAGE
-                    OnboardingState.KEYSTORE_USAGE -> OnboardingState.FORK_SELECTION
+                    OnboardingState.KEYSTORE_USAGE -> OnboardingState.SETTINGS_NAV
+
+                    OnboardingState.SETTINGS_NAV -> OnboardingState.SETTINGS_EXPLAIN
+                    OnboardingState.SETTINGS_EXPLAIN -> OnboardingState.FORK_SELECTION
 
                     OnboardingState.ADV_CUSTOM_INTRO -> OnboardingState.ADV_CUSTOM_LAYERS
                     OnboardingState.ADV_CUSTOM_LAYERS -> OnboardingState.ADV_CUSTOM_REORDER
@@ -189,9 +206,12 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
         OnboardingState.BASIC_PASS,
         OnboardingState.DECRYPT_PREP,
         OnboardingState.DECRYPT_WAIT,
+        OnboardingState.DRAWER_SHOW,
         OnboardingState.KEYSTORE_NAV,
         OnboardingState.KEYSTORE_EXPLAIN,
         OnboardingState.KEYSTORE_USAGE,
+        OnboardingState.SETTINGS_NAV,
+        OnboardingState.SETTINGS_EXPLAIN,
         OnboardingState.ADV_CUSTOM_INTRO,
         OnboardingState.ADV_CUSTOM_LAYERS,
         OnboardingState.ADV_CUSTOM_REORDER,
@@ -199,7 +219,6 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
         OnboardingState.ADV_LOGS_VIEW,
         OnboardingState.ADV_RELEASES -> Alignment.BottomCenter
 
-        // Top Group
         OnboardingState.BASIC_ENCRYPT_WAIT,
         OnboardingState.BASIC_ENCRYPT_DONE,
         OnboardingState.BASIC_OUTPUT,
@@ -208,6 +227,9 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
 
         else -> Alignment.Center
     }
+
+    var offsetX by remember(state) { mutableFloatStateOf(0f) }
+    var offsetY by remember(state) { mutableFloatStateOf(0f) }
 
     Box(
         modifier = Modifier
@@ -218,7 +240,16 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             elevation = CardDefaults.cardElevation(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .pointerInput(state) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        offsetX += dragAmount.x
+                        offsetY += dragAmount.y
+                    }
+                }
         ) {
             Column(Modifier.padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -241,9 +272,6 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
                 Spacer(Modifier.height(20.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    if (state == OnboardingState.BASIC_PASS) {
-                    }
-
                     Button(onClick = onNext) {
                         val label = when(state) {
                             OnboardingState.BASIC_ENCRYPT_WAIT -> "Encrypt"
@@ -260,52 +288,67 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
     }
 }
 
+// ... (Imports and Composable structure remain unchanged)
+
 private fun getPromptTitle(state: OnboardingState): String = when(state) {
-    OnboardingState.BASIC_INTRO -> "The Home Screen"
+    OnboardingState.BASIC_INTRO -> "Primary Workspace"
     OnboardingState.BASIC_INPUT -> "1. Input"
     OnboardingState.BASIC_PASS -> "2. Password"
-    OnboardingState.BASIC_ENCRYPT_WAIT -> "3. Secure It"
+    OnboardingState.BASIC_ENCRYPT_WAIT -> "3. Execution"
     OnboardingState.BASIC_ENCRYPT_DONE -> "Processing..."
-    OnboardingState.BASIC_OUTPUT -> "4. Very Secure"
+    OnboardingState.BASIC_OUTPUT -> "4. Ciphertext"
     OnboardingState.DECRYPT_PREP -> "5. Decryption"
-    OnboardingState.DECRYPT_WAIT -> "6. Unlock"
-    OnboardingState.DECRYPT_DONE -> "7. Read Message"
-    OnboardingState.KEYSTORE_NAV -> "Key Store"
-    OnboardingState.KEYSTORE_EXPLAIN -> "TEE Security"
-    OnboardingState.KEYSTORE_USAGE -> "Easy Access"
+    OnboardingState.DECRYPT_WAIT -> "6. Authenticate"
+    OnboardingState.DECRYPT_DONE -> "7. Verification"
+
+    OnboardingState.DRAWER_SHOW -> "Navigation"
+    OnboardingState.KEYSTORE_NAV -> "Keystore Module"
+    OnboardingState.KEYSTORE_EXPLAIN -> "Hardware Security"
+    OnboardingState.KEYSTORE_USAGE -> "Rapid Access"
+
+    OnboardingState.SETTINGS_NAV -> "Settings"
+    OnboardingState.SETTINGS_EXPLAIN -> "Control Panel"
+
     OnboardingState.ADV_CUSTOM_INTRO -> "Custom Workbench"
-    OnboardingState.ADV_CUSTOM_LAYERS -> "The Algorithms"
-    OnboardingState.ADV_CUSTOM_REORDER -> "Total Control"
-    OnboardingState.ADV_BLOB_EXPLAIN -> "Anatomy of a Blob"
+    OnboardingState.ADV_CUSTOM_LAYERS -> "Algorithm Registry"
+    OnboardingState.ADV_CUSTOM_REORDER -> "Sequence Control"
+    OnboardingState.ADV_BLOB_EXPLAIN -> "Container Anatomy"
+
     OnboardingState.ADV_LOGS_PREP -> "System Console"
-    OnboardingState.ADV_LOGS_VIEW -> "Live Audit"
+    OnboardingState.ADV_LOGS_VIEW -> "Audit Log"
     OnboardingState.ADV_RELEASES -> "Transparency"
     else -> ""
 }
 
 private fun getPromptBody(state: OnboardingState): String = when(state) {
-    OnboardingState.BASIC_INTRO -> "This is your workspace. Sigil is simple: you type, set a password, and get protected text."
-    OnboardingState.BASIC_INPUT -> "Type your message here."
-    OnboardingState.BASIC_PASS -> "Choose a password.\n(Demo Password: BlueHorse)\nTip: Use the eye icon to quickly check what you typed."
-    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tap Encrypt. Sigil will lock your message with 3 layers of protection.\n\n[AES+Twofish+Serpent in random order]."
-    OnboardingState.BASIC_ENCRYPT_DONE -> "Working..."
-    OnboardingState.BASIC_OUTPUT -> "This text is now SEALED. The math guarantee that no one — not even a government — can read this without your specific key."
-    OnboardingState.DECRYPT_PREP -> "To read a message, paste the Encrypted Text into the Input box.\nTip: You can also share a txt message directly to Sigil."
-    OnboardingState.DECRYPT_WAIT -> "Enter the password and tap Decrypt."
-    OnboardingState.DECRYPT_DONE -> "Done! The message is revealed, but only because you had the right password."
+    OnboardingState.BASIC_INTRO -> "This is the Auto tab, which is divided into three primary components: Input, Password, and Output.\n\nNote: You can drag this box at any step if it obstructs your view."
 
-    OnboardingState.KEYSTORE_NAV -> "This is the Key Store (Sidebar -> Key Store)."
-    OnboardingState.KEYSTORE_EXPLAIN -> "Keys are locked in the phone's physical Secure Enclave (TEE), the safest storage on your device.\nWe recommend sharing passwords in-person or via a separate trusted channel.\nCRITICAL: Never send the key and the message on the same platform."
-    OnboardingState.KEYSTORE_USAGE -> "You can access these saved keys anytime by tapping the 🔑 icon inside any password field."
+    OnboardingState.BASIC_INPUT -> "Enter your plain text or message into the first field for processing."
+    OnboardingState.BASIC_PASS -> "Secure your message with a strong password here. You can use the visibility icon to verify your input before proceeding."
+    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tapping Encrypt applies a randomized triple-layer cascade using AES, Twofish, and Serpent algorithms."
+    OnboardingState.BASIC_ENCRYPT_DONE -> "The system is processing..."
+    OnboardingState.BASIC_OUTPUT -> "The resulting output is impossible to break and requires the specific key for decryption."
+    OnboardingState.DECRYPT_PREP -> "To decrypt a message, paste the output directly back into the Input field on this or another device."
+    OnboardingState.DECRYPT_WAIT -> "Enter the correct password to authenticate and reveal the original message."
+    OnboardingState.DECRYPT_DONE -> "Decryption was successful and the original plain text has been restored."
 
-    OnboardingState.ADV_CUSTOM_INTRO -> "Welcome! This is where you build your own chains."
-    OnboardingState.ADV_CUSTOM_LAYERS -> "Select from 15+ industrial algorithms (AES, Twofish, Camellia, GOST, etc)."
-    OnboardingState.ADV_CUSTOM_REORDER -> "You can click the arrowheads to reorder them. Try this later after adding more algorithms with the (+) button..."
-    OnboardingState.ADV_BLOB_EXPLAIN -> "How it works:\n\n[Header: Algo Order] + [Salt] + [IVs] + [Encrypted Data] + [HMAC Signature]\n\nAuto Mode reads the Header to know how to decrypt your Custom chains automatically."
+    OnboardingState.DRAWER_SHOW -> "You can access additional tools and settings by opening the navigation drawer from the left edge or by tapping the ☰ icon."
 
-    OnboardingState.ADV_LOGS_PREP -> "Sigil maintains a real-time system console. You can audit every encryption step, timing metric, and key derivation."
-    OnboardingState.ADV_LOGS_VIEW -> "Here you see the live data from the encryption we just performed. Nothing is hidden."
-    OnboardingState.ADV_RELEASES -> "This tab shows every major update; minor changes can be seen on the GitHub repo or Play Store release notes."
+    OnboardingState.KEYSTORE_NAV -> "The Key Store manages your saved credentials."
+    OnboardingState.KEYSTORE_EXPLAIN -> "Keys are stored within the device's hardware-backed Trusted Execution Environment.\n\nFor safety, never transmit the key and the message on the same channel. In-person exchange is the most secure method."
+    OnboardingState.KEYSTORE_USAGE -> "You can retrieve these securely saved keys by tapping the key icon inside any password field."
+
+    OnboardingState.SETTINGS_NAV -> "The Settings panel controls application behavior and security features."
+    OnboardingState.SETTINGS_EXPLAIN -> "Configure App Lock, Grace Periods, and Screen Shield here.\n\nDisabling Material You allows for manual color customization."
+
+    OnboardingState.ADV_CUSTOM_INTRO -> "This interface allows you to construct unique encryption chains."
+    OnboardingState.ADV_CUSTOM_LAYERS -> "Select from over 15 industrial-grade algorithms, including AES, Twofish, Camellia, and GOST."
+    OnboardingState.ADV_CUSTOM_REORDER -> "Use the arrow controls to reorder the execution sequence, or add new layers using the add button."
+    OnboardingState.ADV_BLOB_EXPLAIN -> "The output structure combines the Header, Salt, IVs, Ciphertext, and HMAC. Auto Mode parses the header to determine the decryption sequence automatically."
+
+    OnboardingState.ADV_LOGS_PREP -> "The system console allows you to audit every encryption step, timing metric, and key derivation in real-time."
+    OnboardingState.ADV_LOGS_VIEW -> "This view displays the raw telemetry data from the cryptographic operation you just performed."
+    OnboardingState.ADV_RELEASES -> "Review major application updates here, or check the repository for detailed release notes."
     else -> ""
 }
 

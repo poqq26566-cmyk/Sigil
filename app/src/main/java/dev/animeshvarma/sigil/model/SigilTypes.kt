@@ -81,7 +81,9 @@ data class UiState(
     val isLoading: Boolean = false,
     val showLogsDialog: Boolean = false,
 
+    // Demo Controls
     val isDemoDropdownExpanded: Boolean = false,
+    val isDemoDrawerOpen: Boolean = false,
 
     val customLayers: List<LayerEntry> = listOf(
         LayerEntry(algorithm = CryptoEngine.Algorithm.AES_GCM)

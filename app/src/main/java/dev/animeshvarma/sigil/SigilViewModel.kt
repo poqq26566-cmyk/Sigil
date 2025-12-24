@@ -402,6 +402,10 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun toggleDemoDrawer(open: Boolean) {
+        _uiState.update { it.copy(isDemoDrawerOpen = open) }
+    }
+
     fun injectDemoVault() {
         _vaultEntries.value = listOf(
             VaultEntry("Key 1", System.currentTimeMillis(), 100, "Unbreakable"),

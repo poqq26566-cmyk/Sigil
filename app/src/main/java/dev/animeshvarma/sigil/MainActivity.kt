@@ -6,6 +6,10 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,7 +43,7 @@ class MainActivity : AppCompatActivity() {
         prefs = SigilPreferences(this)
         lockManager = LockManager(this)
 
-        // 1. SECURE WINDOW IMMEDIATELY (Visual Hardening)
+        // 1. SECURE WINDOW IMMEDIATELY
         if (prefs.isScreenShieldEnabled) {
             window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         }
@@ -91,8 +95,10 @@ class MainActivity : AppCompatActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
+                        // LAYER 1: APP
                         SigilApp(viewModel = viewModel)
 
+                        // LAYER 2: LOCK SCREEN
                         if (isLockedState.value) {
                             LockScreen(
                                 viewModel = viewModel,
@@ -100,14 +106,21 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
 
-                        if (!isLockedState.value && showOnboarding.value) {
-                            OnboardingOrchestrator(
-                                viewModel = viewModel,
-                                onComplete = {
-                                    prefs.setOnboardingCompleted(true)
-                                    showOnboarding.value = false
-                                }
-                            )
+                        // LAYER 3: ONBOARDING WITH ANIMATION
+                        if (!isLockedState.value) {
+                            AnimatedVisibility(
+                                visible = showOnboarding.value,
+                                // FIX: Removed slideOutVertically to prevent layout jump
+                                exit = fadeOut(animationSpec = tween(500))
+                            ) {
+                                OnboardingOrchestrator(
+                                    viewModel = viewModel,
+                                    onComplete = {
+                                        prefs.setOnboardingCompleted(true)
+                                        showOnboarding.value = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
