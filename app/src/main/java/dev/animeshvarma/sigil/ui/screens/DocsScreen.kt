@@ -115,11 +115,47 @@ data class ReleaseCategory(
 @Composable
 fun ReleasesContent() {
     val releases = listOf(
+        // --- v0.4 (ONBOARDING & ACCESS CONTROL) ---
+        ReleaseData(
+            version = "v0.4",
+            title = "Onboarding and Access Control",
+            tag = "Current Build",
+            categories = listOf(
+                ReleaseCategory(
+                    "Onboarding & Discovery",
+                    listOf(
+                        "Interactive Tour: A comprehensive, guided simulation for new users demonstrating live encryption cycles and safe key management without risking real data.",
+                        "Advanced Mode: A specialized path for power users detailing the inner workings of the Layer Manager and Hardware Vault."
+                    )
+                ),
+                ReleaseCategory(
+                    "Access Control",
+                    listOf(
+                        "App Lock: Secure Sigil using Device Biometrics or a Custom PIN which is secured via the Hardware TEE.",
+                        "Grace Period: 'Keep Unlocked' setting allows quick app switching without immediate re-authentication."
+                    )
+                ),
+                ReleaseCategory(
+                    "Privacy & Volatility",
+                    listOf(
+                        "Amnesia Protocol: Immediate sanitation of sensitive input data from volatile memory (RAM) upon backgrounding the application.",
+                        "Screen Shield: Implementation of FLAG_SECURE blocks screenshots and hides content in the 'Recent Apps' overview."
+                    )
+                ),
+                ReleaseCategory(
+                    "Visual Customization",
+                    listOf(
+                        "Advanced Theme Engine: Full support for Material You (Dynamic Colors), Dark/Light modes, and a custom HSV Color Picker with brightness control.",
+                        "Settings Overhaul: A complete redesign of the Settings tab to accommodate new security and appearance controls."
+                    )
+                )
+            )
+        ),
         // --- v0.3 (THE Keystore UPDATE) ---
         ReleaseData(
             version = "v0.3",
             title = "Keystore Implementation",
-            tag = "Current Build",
+            tag = "Dec 9, 2025",
             categories = listOf(
                 ReleaseCategory(
                     "Security & Storage (Engine v0.9.0)",
