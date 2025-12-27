@@ -54,6 +54,7 @@ import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@Suppress("AssignedValueIsNeverRead")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {

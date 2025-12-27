@@ -26,6 +26,7 @@ enum class AppScreen(val title: String) {
     SETTINGS("Settings")
 }
 
+@Suppress("unused")
 enum class CipherType { BLOCK, STREAM } //To be implemented
 enum class CipherMode { GCM, CBC }
 
