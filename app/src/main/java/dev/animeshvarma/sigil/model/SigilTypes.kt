@@ -26,7 +26,7 @@ enum class AppScreen(val title: String) {
     SETTINGS("Settings")
 }
 
-enum class CipherType { BLOCK, STREAM }
+enum class CipherType { BLOCK, STREAM } //To be implemented
 enum class CipherMode { GCM, CBC }
 
 data class SigilAlgorithm(

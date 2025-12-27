@@ -7,7 +7,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -37,21 +36,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.AlgorithmRegistry
-import dev.animeshvarma.sigil.model.SigilAlgorithm
 import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
 import dev.animeshvarma.sigil.ui.components.StyledLayerContainer
@@ -164,7 +158,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                         Box(
                             modifier = Modifier
                                 .animateItem(
-                                    placementSpec = spring<IntOffset>(
+                                    placementSpec = spring(
                                         stiffness = AnimationConfig.STIFFNESS,
                                         dampingRatio = AnimationConfig.DAMPING
                                     )
@@ -497,12 +491,13 @@ fun Modifier.verticalFadingEdge(): Modifier = this
     .drawWithContent {
         drawContent()
         val fadeHeight = 40.dp.toPx()
+        val height = size.height
 
         drawRect(
             brush = Brush.verticalGradient(
-                0f to Color.Black,
-                0.8f to Color.Black,
-                1f to Color.Transparent
+                colors = listOf(Color.Black, Color.Transparent),
+                startY = height - fadeHeight,
+                endY = height
             ),
             blendMode = BlendMode.DstIn
         )
