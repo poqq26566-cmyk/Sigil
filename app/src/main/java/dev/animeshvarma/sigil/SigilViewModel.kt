@@ -3,6 +3,7 @@ package dev.animeshvarma.sigil
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.edit
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.AndroidViewModel
@@ -41,6 +42,20 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     // Vault State
     private val _vaultEntries = MutableStateFlow<List<VaultEntry>>(emptyList())
     val vaultEntries: StateFlow<List<VaultEntry>> = _vaultEntries
+
+    private var pendingSharedText: String? = null
+
+    fun cachePendingIntent(text: String) {
+        pendingSharedText = text
+        addLog("Incoming data cached (Waiting for unlock).")
+    }
+
+    fun consumePendingIntent() {
+        pendingSharedText?.let { text ->
+            handleIncomingSharedText(text)
+            pendingSharedText = null
+        }
+    }
 
     init {
         refreshVault()
@@ -103,12 +118,14 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- CUSTOM LAYER MANAGEMENT ---
-    fun addLayer(algo: CryptoEngine.Algorithm) {
-        _uiState.update { it.copy(customLayers = it.customLayers + LayerEntry(algorithm = algo)) }
-    }
-
     fun addLayers(algos: List<CryptoEngine.Algorithm>) {
-        _uiState.update { it.copy(customLayers = it.customLayers + algos.map { LayerEntry(algorithm = it) }) }
+        _uiState.update { state ->
+            state.copy(
+                customLayers = state.customLayers + algos.map { algo ->
+                    LayerEntry(algorithm = algo)
+                }
+            )
+        }
     }
 
     fun removeLayer(index: Int) {
@@ -484,12 +501,13 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             // Nuke Preferences files directly
             val context = getApplication<Application>()
 
-            // Clear SigilPrefs
-            context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+            context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit {
+                this.clear()
+            }
 
-            // Clear Vault Data
-            context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE).edit().clear().commit()
-
+            context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE).edit {
+                this.clear()
+            }
             withContext(Dispatchers.Main) {
                 // Restart App Process to reset all state
                 val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)

@@ -9,7 +9,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -102,7 +101,10 @@ class MainActivity : AppCompatActivity() {
                         if (isLockedState.value) {
                             LockScreen(
                                 viewModel = viewModel,
-                                onUnlock = { isLockedState.value = false }
+                                onUnlock = {
+                                    isLockedState.value = false
+                                    viewModel.consumePendingIntent()
+                                }
                             )
                         }
 
@@ -110,7 +112,6 @@ class MainActivity : AppCompatActivity() {
                         if (!isLockedState.value) {
                             AnimatedVisibility(
                                 visible = showOnboarding.value,
-                                // FIX: Removed slideOutVertically to prevent layout jump
                                 exit = fadeOut(animationSpec = tween(500))
                             ) {
                                 OnboardingOrchestrator(
@@ -130,7 +131,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val viewModel = ViewModelProvider(this)[SigilViewModel::class.java]
         checkAndProcessIntent(intent, viewModel)
     }
 
@@ -138,7 +138,13 @@ class MainActivity : AppCompatActivity() {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 intent.removeExtra(Intent.EXTRA_TEXT)
-                viewModel.handleIncomingSharedText(sharedText)
+
+                if (lockManager.isAppLocked()) {
+                    viewModel.cachePendingIntent(sharedText)
+                    isLockedState.value = true
+                } else {
+                    viewModel.handleIncomingSharedText(sharedText)
+                }
             }
         }
     }
