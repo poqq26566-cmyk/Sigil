@@ -264,12 +264,13 @@ object CryptoEngine {
 
         } catch (e: IllegalArgumentException) {
             throw e
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             throw IllegalArgumentException("Container Corrupted or Invalid Format.")
         }
     }
 
     // --- SECURE HELPERS ---
+    @Suppress("SameParameterValue")
     private fun findSequenceIndex(source: ByteArray, pattern: ByteArray): Int {
         if (pattern.isEmpty() || source.size < pattern.size) return -1
         for (i in 0..source.size - pattern.size) {
