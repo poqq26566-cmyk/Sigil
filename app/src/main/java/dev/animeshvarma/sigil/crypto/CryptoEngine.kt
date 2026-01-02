@@ -10,7 +10,6 @@ import org.bouncycastle.crypto.params.HKDFParameters
 import org.bouncycastle.crypto.params.KeyParameter
 import org.bouncycastle.crypto.params.ParametersWithIV
 import org.bouncycastle.crypto.engines.*
-import org.bouncycastle.crypto.modes.GCMBlockCipher
 import org.bouncycastle.crypto.modes.CBCBlockCipher
 import org.bouncycastle.crypto.paddings.PKCS7Padding
 import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher
@@ -23,6 +22,9 @@ import java.util.Base64
 import java.util.Arrays
 import java.util.zip.Deflater
 import java.util.zip.Inflater
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 object CryptoEngine {
 
@@ -34,8 +36,12 @@ object CryptoEngine {
     private const val MAX_DATA_LIMIT = 10 * 1024 * 1024 // 10MB
     private const val MAX_METADATA_SIZE = 4096 // 4KB
 
-    // Legacy Delimiter as Bytes
-    private val LEGACY_DELIMITER_BYTES = "::SIGIL_CS::".toByteArray(StandardCharsets.UTF_8)
+    // Configuration Data Class for Argon2id
+    data class KdfConfig(
+        val iterations: Int = 4,
+        val memoryPow2: Int = 16, // 64MB
+        val parallelism: Int = 4
+    )
 
     enum class Algorithm {
         AES_GCM, AES_CBC, TWOFISH_CBC, SERPENT_CBC, CAMELLIA_CBC,
@@ -63,6 +69,7 @@ object CryptoEngine {
         data: ByteArray,
         password: CharArray,
         algorithms: List<Algorithm> = listOf(Algorithm.AES_GCM),
+        kdfConfig: KdfConfig = KdfConfig(),
         compress: Boolean = true,
         logCallback: (String) -> Unit = {}
     ): String {
@@ -75,12 +82,12 @@ object CryptoEngine {
         val salt = ByteArray(16)
         secureRandom.nextBytes(salt)
 
-        // 2. Root Secret
+        // 2. Root Secret (Argon2id)
         val passBytes = toBytes(password)
-        val rootSecret = deriveRootSecret(passBytes, salt)
+        val rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
         Arrays.fill(passBytes, 0.toByte())
 
-        logCallback("Root Secret derived (Argon2id).")
+        logCallback("Root Secret derived (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
         // 3. Payload
         var currentBytes = data.copyOf()
@@ -94,14 +101,20 @@ object CryptoEngine {
         // 4. Chain Encryption
         val ivListBytes = mutableListOf<ByteArray>()
         val algoNames = algorithms.joinToString(",") { it.name }
+
         logCallback("Chain Sequence: $algoNames")
 
         algorithms.forEachIndexed { index, algo ->
             val layerId = index + 1
-            val iv = ByteArray(getBlockSize(algo)).apply { secureRandom.nextBytes(this) }
+            if (getBlockSize(algo) == 8) {
+                logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block).")
+            }
+
+            val ivSize = if (algo == Algorithm.AES_GCM) 12 else getBlockSize(algo)
+            val iv = ByteArray(ivSize).apply { secureRandom.nextBytes(this) }
             ivListBytes.add(iv)
 
-            val layerKey = deriveSubKey(rootSecret, "SIGIL_LAYER_$layerId", getKeySize(algo))
+            val layerKey = deriveSubKey(rootSecret, salt, "SIGIL_LAYER_$layerId", getKeySize(algo))
 
             logCallback("Layer $layerId: Encrypting with ${algo.name}...")
             currentBytes = processCipher(true, algo, currentBytes, layerKey, iv)
@@ -109,7 +122,7 @@ object CryptoEngine {
         }
 
         // 5. Header
-        val headerKey = deriveSubKey(rootSecret, "SIGIL_HEADER", 32)
+        val headerKey = deriveSubKey(rootSecret, salt, "SIGIL_HEADER", 32)
         val flags = if (compress) "C" else "N"
         val ivStringList = ivListBytes.joinToString(",") { encoder.encodeToString(it) }
 
@@ -117,13 +130,16 @@ object CryptoEngine {
         val metadataBytes = metadataString.toByteArray(StandardCharsets.UTF_8)
         val headerIv = ByteArray(12).apply { secureRandom.nextBytes(this) }
 
-        val encryptedMetadataBytes = encryptAesGcm(metadataBytes, headerKey, headerIv, metadataBytes)
+        val encryptedMetadataBytes = encryptAesGcm(metadataBytes, headerKey, headerIv, salt)
         Arrays.fill(headerKey, 0.toByte())
 
-        logCallback("Header encrypted & sealed (AES-GCM + AAD).")
+        logCallback("Header encrypted (AES-GCM + AAD).")
 
         // 6. Pack
-        val packBuffer = ByteBuffer.allocate(16 + 12 + 4 + encryptedMetadataBytes.size + currentBytes.size)
+        val totalSize = 16 + 12 + 4 + encryptedMetadataBytes.size + currentBytes.size
+        if (totalSize > MAX_DATA_LIMIT) throw IllegalArgumentException("Pack size exceeds limit.")
+
+        val packBuffer = ByteBuffer.allocate(totalSize)
         packBuffer.put(salt)
         packBuffer.put(headerIv)
         packBuffer.putInt(encryptedMetadataBytes.size)
@@ -132,7 +148,7 @@ object CryptoEngine {
         val packedBytes = packBuffer.array()
 
         // 7. MAC
-        val macKey = deriveSubKey(rootSecret, "SIGIL_GLOBAL_MAC", 32)
+        val macKey = deriveSubKey(rootSecret, salt, "SIGIL_GLOBAL_MAC", 32)
         val hmac = calculateHMAC(packedBytes, macKey)
         Arrays.fill(macKey, 0.toByte())
         Arrays.fill(rootSecret, 0.toByte())
@@ -151,6 +167,7 @@ object CryptoEngine {
     fun decrypt(
         encryptedData: String,
         password: CharArray,
+        kdfConfig: KdfConfig = KdfConfig(),
         logCallback: (String) -> Unit = {}
     ): ByteArray {
         val startTime = System.currentTimeMillis()
@@ -175,11 +192,11 @@ object CryptoEngine {
 
             // Reconstruct Root
             val passBytes = toBytes(password)
-            val rootSecret = deriveRootSecret(passBytes, salt)
+            val rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
             Arrays.fill(passBytes, 0.toByte())
             logCallback("Root Secret reconstructed.")
 
-            val macKey = deriveSubKey(rootSecret, "SIGIL_GLOBAL_MAC", 32)
+            val macKey = deriveSubKey(rootSecret, salt, "SIGIL_GLOBAL_MAC", 32)
             val calculatedMac = calculateHMAC(payloadBytes, macKey)
 
             if (!constantTimeEquals(storedMac, calculatedMac)) {
@@ -187,25 +204,26 @@ object CryptoEngine {
                 throw IllegalArgumentException("HMAC Verification Failed.")
             }
             Arrays.fill(macKey, 0.toByte())
-            logCallback("Global HMAC Verified. Container is authentic.")
+            logCallback("Global HMAC Verified.")
 
             // 2. Unpack
             val buffer = ByteBuffer.wrap(payloadBytes)
-            buffer.position(16)
+            buffer.position(16) // Skip Salt
             val headerIv = ByteArray(12); buffer.get(headerIv)
             val headerLen = buffer.int
 
             if (headerLen !in 0..MAX_METADATA_SIZE) {
                 Arrays.fill(rootSecret, 0.toByte())
-                throw IllegalArgumentException("Invalid Header Size (Potential DoS Attack).")
+                throw IllegalArgumentException("Invalid Header Size.")
             }
 
             val encryptedMeta = ByteArray(headerLen); buffer.get(encryptedMeta)
             val bodyBytes = ByteArray(buffer.remaining()); buffer.get(bodyBytes)
 
             // 3. Header
-            val headerKey = deriveSubKey(rootSecret, "SIGIL_HEADER", 32)
-            val metaBytes = decryptAesGcm(encryptedMeta, headerKey, headerIv)
+            val headerKey = deriveSubKey(rootSecret, salt, "SIGIL_HEADER", 32)
+
+            val metaBytes = decryptAesGcm(encryptedMeta, headerKey, headerIv, salt)
             Arrays.fill(headerKey, 0.toByte())
 
             val metaString = String(metaBytes, StandardCharsets.UTF_8)
@@ -223,9 +241,9 @@ object CryptoEngine {
                 val algo = Algorithm.valueOf(algoNames[i])
                 val iv = decoder.decode(ivStrings[i])
                 val keySize = getKeySize(algo)
-                val layerKey = deriveSubKey(rootSecret, "SIGIL_LAYER_$layerId", keySize)
 
-                logCallback("Layer $layerId: Decrypting with ${algo.name}...")
+                val layerKey = deriveSubKey(rootSecret, salt, "SIGIL_LAYER_$layerId", keySize)
+
                 currentBytes = processCipher(false, algo, currentBytes, layerKey, iv)
                 Arrays.fill(layerKey, 0.toByte())
             }
@@ -236,27 +254,6 @@ object CryptoEngine {
                 val compressedSize = currentBytes.size
                 currentBytes = safeDecompress(currentBytes)
                 logCallback("Decompressed: $compressedSize -> ${currentBytes.size} bytes")
-            }
-
-            // 6. Secure Legacy Checksum Logic
-            val delimiterIndex = findSequenceIndex(currentBytes, LEGACY_DELIMITER_BYTES)
-            if (delimiterIndex != -1) {
-
-                val payload = currentBytes.copyOfRange(0, delimiterIndex)
-
-                val calculatedHashStr = hashSHA256(payload)
-
-                val storedHashBytes = currentBytes.copyOfRange(delimiterIndex + LEGACY_DELIMITER_BYTES.size, currentBytes.size)
-                val storedHashStr = String(storedHashBytes, StandardCharsets.UTF_8)
-
-                if (calculatedHashStr == storedHashStr) {
-                    logCallback("Integrity Verified (Internal Checksum).")
-                    logCallback("Decryption complete in ${System.currentTimeMillis() - startTime}ms.")
-                    return payload // Return only the payload
-                } else {
-                    logCallback("[WARNING] Internal Checksum mismatch.")
-                    return currentBytes // Return raw to let user decide
-                }
             }
 
             logCallback("Decryption complete in ${System.currentTimeMillis() - startTime}ms.")
@@ -270,21 +267,6 @@ object CryptoEngine {
     }
 
     // --- SECURE HELPERS ---
-    @Suppress("SameParameterValue")
-    private fun findSequenceIndex(source: ByteArray, pattern: ByteArray): Int {
-        if (pattern.isEmpty() || source.size < pattern.size) return -1
-        for (i in 0..source.size - pattern.size) {
-            var match = true
-            for (j in pattern.indices) {
-                if (source[i + j] != pattern[j]) {
-                    match = false
-                    break
-                }
-            }
-            if (match) return i
-        }
-        return -1
-    }
 
     private fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
         if (a.size != b.size) return false
@@ -323,7 +305,6 @@ object CryptoEngine {
         val outputStream = ByteArrayOutputStream(data.size)
         val buffer = ByteArray(1024)
         var totalBytes = 0
-
         while (!inflater.finished()) {
             val count = inflater.inflate(buffer)
             if (count == 0 && !inflater.finished()) break
@@ -338,20 +319,12 @@ object CryptoEngine {
     private fun stripPadding(i: String) = i.trimEnd('=')
     private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
 
-    private fun hashSHA256(i: ByteArray): String {
-        val d = SHA256Digest()
-        val o = ByteArray(d.digestSize)
-        d.update(i, 0, i.size)
-        d.doFinal(o, 0)
-        return o.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun deriveRootSecret(p: ByteArray, s: ByteArray): ByteArray {
+    private fun deriveRootSecret(p: ByteArray, s: ByteArray, config: KdfConfig): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-            .withIterations(16)
-            .withMemoryPowOfTwo(16)
-            .withParallelism(4)
+            .withIterations(config.iterations)
+            .withMemoryPowOfTwo(config.memoryPow2)
+            .withParallelism(config.parallelism)
             .withSalt(s)
             .build()
         val g = Argon2BytesGenerator()
@@ -361,12 +334,19 @@ object CryptoEngine {
         return r
     }
 
-    private fun deriveSubKey(r: ByteArray, c: String, l: Int): ByteArray { val h = HKDFBytesGenerator(SHA512Digest()); h.init(HKDFParameters(r, null, c.toByteArray(StandardCharsets.UTF_8))); val k = ByteArray(l); h.generateBytes(k, 0, l); return k }
+    private fun deriveSubKey(r: ByteArray, salt: ByteArray, c: String, l: Int): ByteArray {
+        val h = HKDFBytesGenerator(SHA512Digest())
+        h.init(HKDFParameters(r, salt, c.toByteArray(StandardCharsets.UTF_8)))
+        val k = ByteArray(l)
+        h.generateBytes(k, 0, l)
+        return k
+    }
+
     private fun calculateHMAC(d: ByteArray, k: ByteArray): ByteArray { val h = HMac(SHA256Digest()); h.init(KeyParameter(k)); val o = ByteArray(h.macSize); h.update(d, 0, d.size); h.doFinal(o, 0); return o }
 
     private fun processCipher(encrypt: Boolean, algo: Algorithm, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
         return when (algo) {
-            Algorithm.AES_GCM -> if (encrypt) encryptAesGcm(data, key, iv, null) else decryptAesGcm(data, key, iv)
+            Algorithm.AES_GCM -> if (encrypt) encryptAesGcm(data, key, iv, null) else decryptAesGcm(data, key, iv, null)
             Algorithm.AES_CBC -> processBlockCipher(encrypt, AESEngine.newInstance(), data, key, iv)
             Algorithm.TWOFISH_CBC -> processBlockCipher(encrypt, TwofishEngine(), data, key, iv)
             Algorithm.SERPENT_CBC -> processBlockCipher(encrypt, SerpentEngine(), data, key, iv)
@@ -394,21 +374,20 @@ object CryptoEngine {
     }
 
     private fun encryptAesGcm(data: ByteArray, key: ByteArray, iv: ByteArray, aad: ByteArray?): ByteArray {
-        val c = GCMBlockCipher.newInstance(AESEngine.newInstance())
-        c.init(true, ParametersWithIV(KeyParameter(key), iv))
-        if (aad != null) c.processAADBytes(aad, 0, aad.size)
-        val o = ByteArray(c.getOutputSize(data.size))
-        val l = c.processBytes(data, 0, data.size, o, 0)
-        val f = c.doFinal(o, l)
-        return o.copyOf(l + f)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val keySpec = SecretKeySpec(key, "AES")
+        val gcmSpec = GCMParameterSpec(128, iv)
+        cipher.init(Cipher.ENCRYPT_MODE, keySpec, gcmSpec)
+        if (aad != null) cipher.updateAAD(aad)
+        return cipher.doFinal(data)
     }
 
-    private fun decryptAesGcm(data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
-        val c = GCMBlockCipher.newInstance(AESEngine.newInstance())
-        c.init(false, ParametersWithIV(KeyParameter(key), iv))
-        val o = ByteArray(c.getOutputSize(data.size))
-        val l = c.processBytes(data, 0, data.size, o, 0)
-        val f = c.doFinal(o, l)
-        return o.copyOf(l + f)
+    private fun decryptAesGcm(data: ByteArray, key: ByteArray, iv: ByteArray, aad: ByteArray?): ByteArray {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        val keySpec = SecretKeySpec(key, "AES")
+        val gcmSpec = GCMParameterSpec(128, iv)
+        cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec)
+        if (aad != null) cipher.updateAAD(aad)
+        return cipher.doFinal(data)
     }
 }

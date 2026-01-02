@@ -138,7 +138,7 @@ class KeystoreRepository(context: Context) {
 
         try {
             val encryptedBlob = CryptoEngine.encrypt(
-                data = secret,
+                data = secret.toByteArray(java.nio.charset.StandardCharsets.UTF_8),
                 password = vaultKey,
                 algorithms = STORAGE_ALGORITHMS,
                 compress = false
@@ -164,10 +164,12 @@ class KeystoreRepository(context: Context) {
         val vaultKey = getVaultKey()
 
         return try {
-            CryptoEngine.decrypt(
+            // FIX: Decrypt returns ByteArray, convert back to String
+            val decryptedBytes = CryptoEngine.decrypt(
                 encryptedData = encryptedBlob,
                 password = vaultKey
             )
+            String(decryptedBytes, java.nio.charset.StandardCharsets.UTF_8)
         } catch (e: Exception) {
             e.printStackTrace()
             null

@@ -194,7 +194,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 if (chain.isEmpty()) throw Exception("No encryption layers selected.")
 
                 val result = CryptoEngine.encrypt(
-                    data = input,
+                    data = input.toByteArray(java.nio.charset.StandardCharsets.UTF_8),
                     password = pwdChars,
                     algorithms = chain,
                     compress = compress,
@@ -239,18 +239,20 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val pwdChars = pwdString.toCharArray()
             try {
-                val decrypted = CryptoEngine.decrypt(
+                val decryptedBytes = CryptoEngine.decrypt(
                     encryptedData = input,
                     password = pwdChars,
                     logCallback = { addLog(it) }
                 )
 
+                val decryptedString = String(decryptedBytes, java.nio.charset.StandardCharsets.UTF_8)
+
                 _uiState.update {
                     if (it.selectedMode == SigilMode.AUTO) it.copy(
-                        autoOutput = decrypted,
+                        autoOutput = decryptedString, // FIX: Pass String, not ByteArray
                         isLoading = false
                     )
-                    else it.copy(customOutput = decrypted, isLoading = false)
+                    else it.copy(customOutput = decryptedString, isLoading = false)
                 }
 
             } catch (e: Exception) {

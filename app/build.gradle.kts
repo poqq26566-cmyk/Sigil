@@ -72,7 +72,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // Crypto
-    implementation("org.bouncycastle:bcpkix-jdk15to18:1.79")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.81")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
