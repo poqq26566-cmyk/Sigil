@@ -12,7 +12,7 @@ android {
         applicationId = "dev.animeshvarma.sigil"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
+        versionCode = 8
         versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
