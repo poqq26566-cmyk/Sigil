@@ -276,7 +276,7 @@ object CryptoEngine {
     fun hashPin(pin: CharArray, salt: ByteArray): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-            .withIterations(32)
+            .withIterations(5)
             .withMemoryPowOfTwo(16)
             .withParallelism(2)
             .withSalt(salt)

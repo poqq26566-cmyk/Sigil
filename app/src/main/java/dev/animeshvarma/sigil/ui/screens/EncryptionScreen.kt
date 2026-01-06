@@ -7,7 +7,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -27,7 +29,8 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
         OutlinedTextField(
             value = uiState.autoInput,
             onValueChange = { viewModel.onInputTextChanged(it) },
-            label = { Text("Text to encrypt/decrypt") },
+            label = { Text("Input Text") },
+            placeholder = { Text("Input Text...") },
             modifier = Modifier.weight(1f).fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
             colors = OutlinedTextFieldDefaults.colors(
@@ -55,7 +58,7 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // 3. Button Group
+        // 3. Button Group (Logs, Encrypt, Decrypt)
         SigilButtonGroup(
             onLogs = { viewModel.onLogsClicked() },
             onEncrypt = { viewModel.onEncrypt() },
@@ -64,7 +67,7 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // 4. Output Field (With Share Intent)
+        // 4. Output Field (With Share Intent & Secure Copy)
         OutlinedTextField(
             value = uiState.autoOutput,
             onValueChange = { },
@@ -80,8 +83,9 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
             ),
             trailingIcon = {
                 Column(
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier.padding(end = 4.dp)
                 ) {
+                    // SHARE BUTTON
                     IconButton(onClick = {
                         if (uiState.autoOutput.isNotEmpty()) {
                             val sendIntent = Intent().apply {
@@ -94,18 +98,23 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
                             viewModel.addLog("Share Sheet opened.")
                         }
                     }) {
-                        Icon(Icons.Default.Share, "Share", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     IconButton(onClick = {
                         if (uiState.autoOutput.isNotEmpty()) {
-                            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                            val clip = android.content.ClipData.newPlainText("Sigil Output", uiState.autoOutput)
-                            clipboard.setPrimaryClip(clip)
-                            viewModel.addLog("Copied to clipboard")
+                            viewModel.copyToClipboardSecurely(uiState.autoOutput, "Sigil Output")
                         }
                     }) {
-                        Icon(Icons.Default.ContentCopy, "Copy", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

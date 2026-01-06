@@ -12,9 +12,12 @@ class SigilPreferences(context: Context) {
     companion object {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_LOCK_MODE = "lock_mode"
-
+        private const val KEY_KDF_ITERATIONS = "kdf_iterations"
+        private const val KEY_KDF_MEMORY = "kdf_memory_pow2"
+        private const val KEY_KDF_PARALLELISM = "kdf_parallelism"
         private const val KEY_GRACE_ENABLED = "grace_period_enabled"
         private const val KEY_GRACE_MINUTES = "grace_period_minutes"
+        private const val KEY_CLIPBOARD_TIMEOUT = "clipboard_timeout_seconds"
         private const val KEY_SCREEN_SHIELD = "screen_shield_enabled"
         private const val KEY_LAST_BG_TIME = "last_background_timestamp"
         private const val KEY_DYNAMIC_COLORS = "dynamic_colors_enabled"
@@ -70,4 +73,22 @@ class SigilPreferences(context: Context) {
     var selectedThemeColor: Int
         get() = prefs.getInt(KEY_THEME_COLOR, 0xFFFFFFFF.toInt())
         set(value) = prefs.edit { putInt(KEY_THEME_COLOR, value) }
+
+    var clipboardTimeoutSeconds: Int
+        get() = prefs.getInt(KEY_CLIPBOARD_TIMEOUT, 30)
+        set(value) = prefs.edit { putInt(KEY_CLIPBOARD_TIMEOUT, value) }
+
+    // --- CRYPTOGRAPHY SETTINGS ---
+    var kdfIterations: Int
+        get() = prefs.getInt(KEY_KDF_ITERATIONS, 10)
+        set(value) = prefs.edit { putInt(KEY_KDF_ITERATIONS, value) }
+
+
+    var kdfMemoryPow2: Int
+        get() = prefs.getInt(KEY_KDF_MEMORY, 16)
+        set(value) = prefs.edit { putInt(KEY_KDF_MEMORY, value) }
+
+    var kdfParallelism: Int
+        get() = prefs.getInt(KEY_KDF_PARALLELISM, 4)
+        set(value) = prefs.edit { putInt(KEY_KDF_PARALLELISM, value) }
 }

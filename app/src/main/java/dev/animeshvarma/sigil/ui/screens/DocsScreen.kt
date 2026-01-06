@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package dev.animeshvarma.sigil.ui.screens
 
 import androidx.compose.animation.AnimatedContent
@@ -115,16 +117,41 @@ data class ReleaseCategory(
 @Composable
 fun ReleasesContent() {
     val releases = listOf(
-        // --- v0.4 (ONBOARDING & ACCESS CONTROL) ---
+        // --- v0.4 (SECURITY CORE & ONBOARDING) ---
         ReleaseData(
             version = "v0.4",
             title = "Onboarding & Access Control",
             tag = "Current Build",
             categories = listOf(
                 ReleaseCategory(
+                    "⚠️ BREAKING CHANGES",
+                    listOf(
+                        "Incompatible Ciphertexts: Data encrypted with previous versions cannot be decrypted. The Key Derivation Function (KDF) logic has changed to support dynamic tuning.",
+                        "Vault Wipe: The internal Keystore format has been hardened. Old saved keys are incompatible and have been cleared.",
+                        "Auth Reset: PIN storage has moved to a Salted Argon2 Hash architecture. You must set a new PIN."
+                    )
+                ),
+                ReleaseCategory(
+                    "Core Cryptography (Engine v0.10.2)",
+                    listOf(
+                        "Quad-Layer Chain: 'Auto Mode' now utilizes a hybrid cascade of AES-256 + ChaCha20 + Twofish + Serpent.",
+                        "ChaCha20-Poly1305: Added support for the high-performance ARX stream cipher (IETF standard).",
+                        "Performance Tuning: Optimized Argon2id configuration for interactive UI responsiveness without compromising memory hardness.",
+                        "Padding Oracle Mitigation: Unified exception handling to prevent side-channel leaks."
+                    )
+                ),
+                ReleaseCategory(
+                    "Zero-Trust Architecture",
+                    listOf(
+                        "Zero-Knowledge Auth: App PINs are now stored as Salted Argon2 Hashes. It is mathematically impossible for the app to retrieve/reveal your PIN.",
+                        "Anti-Tamper Biometrics: Fingerprint unlock now binds to a TEE CryptoObject. Root/Frida hooks cannot bypass authentication.",
+                        "Secure Clipboard: Added 'Sensitive Content' flags (Android 13+) and an auto-wipe timer to clear copied secrets."
+                    )
+                ),
+                ReleaseCategory(
                     "Onboarding & Discovery",
                     listOf(
-                        "Interactive Tour: A comprehensive, guided simulation for new users demonstrating live encryption cycles and safe key management without risking real data.",
+                        "Interactive Tour: A comprehensive, guided simulation for new users demonstrating live encryption cycles and safe key management.",
                         "Advanced Mode: A specialized path for power users detailing the inner workings of the Layer Manager and Hardware Vault."
                     )
                 ),
@@ -139,14 +166,15 @@ fun ReleasesContent() {
                     "Privacy & Volatility",
                     listOf(
                         "Amnesia Protocol: Immediate sanitation of sensitive input data from volatile memory (RAM) upon backgrounding the application.",
-                        "Screen Shield: Implementation of FLAG_SECURE blocks screenshots and hides content in the 'Recent Apps' overview."
+                        "Screen Shield: Implementation of FLAG_SECURE blocks screenshots and hides content in the 'Recent Apps' overview.",
+                        "Manifest Hardening: Explicitly disabled ADB and Cloud backups to prevent data extraction."
                     )
                 ),
                 ReleaseCategory(
                     "Visual Customization",
                     listOf(
-                        "Advanced Theme Engine: Full support for Material You (Dynamic Colors), Dark/Light modes, and a custom HSV Color Picker with brightness control.",
-                        "Settings Overhaul: A complete redesign of the Settings tab to accommodate new security and appearance controls."
+                        "Advanced Theme Engine: Full support for Material You (Dynamic Colors), Dark/Light modes, and a custom HSV Color Picker.",
+                        "Settings Overhaul: A complete redesign of the Settings tab to accommodate new KDF tuning and appearance controls."
                     )
                 )
             )
@@ -337,7 +365,7 @@ fun ReleaseCard(release: ReleaseData, defaultExpanded: Boolean) {
                     Text(
                         text = category.title,
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.secondary,
+                        color = if (category.title.contains("BREAKING")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )

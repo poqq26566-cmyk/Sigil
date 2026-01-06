@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -288,8 +287,6 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
     }
 }
 
-// ... (Imports and Composable structure remain unchanged)
-
 private fun getPromptTitle(state: OnboardingState): String = when(state) {
     OnboardingState.BASIC_INTRO -> "Primary Workspace"
     OnboardingState.BASIC_INPUT -> "1. Input"
@@ -325,7 +322,9 @@ private fun getPromptBody(state: OnboardingState): String = when(state) {
 
     OnboardingState.BASIC_INPUT -> "Enter your plain text or message into the first field for processing."
     OnboardingState.BASIC_PASS -> "Secure your message with a strong password here. You can use the visibility icon to verify your input before proceeding."
-    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tapping Encrypt applies a randomized triple-layer cascade using AES, Twofish, and Serpent algorithms."
+
+    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tapping Encrypt applies a randomized quad-layer cascade using AES, ChaCha20, Twofish, and Serpent algorithms."
+
     OnboardingState.BASIC_ENCRYPT_DONE -> "The system is processing..."
     OnboardingState.BASIC_OUTPUT -> "The resulting output is impossible to break and requires the specific key for decryption."
     OnboardingState.DECRYPT_PREP -> "To decrypt a message, paste the output directly back into the Input field on this or another device."
@@ -339,7 +338,7 @@ private fun getPromptBody(state: OnboardingState): String = when(state) {
     OnboardingState.KEYSTORE_USAGE -> "You can retrieve these securely saved keys by tapping the key icon inside any password field."
 
     OnboardingState.SETTINGS_NAV -> "The Settings panel controls application behavior and security features."
-    OnboardingState.SETTINGS_EXPLAIN -> "Configure App Lock, Grace Periods, and Screen Shield here.\n\nDisabling Material You allows for manual color customization."
+    OnboardingState.SETTINGS_EXPLAIN -> "Configure App Lock, Grace Periods, Encryption parameters, and Screen Shield here.\n\nDisabling Material You allows for manual color customization."
 
     OnboardingState.ADV_CUSTOM_INTRO -> "This interface allows you to construct unique encryption chains."
     OnboardingState.ADV_CUSTOM_LAYERS -> "Select from over 15 industrial-grade algorithms, including AES, Twofish, Camellia, and GOST."

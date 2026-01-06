@@ -26,7 +26,9 @@ data class VaultEntry(
 
 class KeystoreRepository(context: Context) {
 
-    private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    private val keyStore: KeyStore by lazy {
+        KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    }
     private val prefs: SharedPreferences = context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE)
 
     init {
@@ -243,7 +245,7 @@ class KeystoreRepository(context: Context) {
 
         private val VAULT_KDF_CONFIG = CryptoEngine.KdfConfig(
             iterations = 10,
-            memoryPow2 = 18,
+            memoryPow2 = 16,
             parallelism = 4
         )
     }

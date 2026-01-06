@@ -1,3 +1,5 @@
+@file:Suppress("AssignedValueIsNeverRead")
+
 package dev.animeshvarma.sigil.ui.screens
 
 import android.content.Context
@@ -16,10 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.animeshvarma.sigil.SigilViewModel
@@ -43,6 +47,7 @@ import dev.animeshvarma.sigil.util.BiometricHelper
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.system.exitProcess
 
@@ -52,13 +57,22 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     val prefs = viewModel.getPrefs()
 
     // --- STATE HOISTING ---
-    // General
     var onboardingToggle by remember { mutableStateOf(viewModel.isOnboardingReset()) }
 
-    // Security
+    // Security State
     var lockMode by remember { mutableStateOf(prefs.lockMode) }
+
+    // Grace Period
     var graceEnabled by remember { mutableStateOf(prefs.isGracePeriodEnabled) }
     var graceMinutes by remember { mutableFloatStateOf(prefs.graceDurationMinutes.toFloat()) }
+
+    // Cryptography (KDF)
+    var kdfIterations by remember { mutableFloatStateOf(prefs.kdfIterations.toFloat()) }
+    var kdfMemory by remember { mutableFloatStateOf(prefs.kdfMemoryPow2.toFloat()) }
+    var kdfParallelism by remember { mutableFloatStateOf(prefs.kdfParallelism.toFloat()) }
+
+    // Clipboard
+    var clipTimeout by remember { mutableFloatStateOf(prefs.clipboardTimeoutSeconds.toFloat()) }
 
     // Privacy
     var screenShield by remember { mutableStateOf(prefs.isScreenShieldEnabled) }
@@ -69,14 +83,15 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var selectedColorInt by remember { mutableIntStateOf(prefs.selectedThemeColor) }
 
     // Dialogs
-    var showPinDialog by remember { mutableStateOf(false) }
-    var showViewPinDialog by remember { mutableStateOf(false) }
+    var showSetPinDialog by remember { mutableStateOf(false) }
+    var showVerifyPinDialog by remember { mutableStateOf(false) }
     var showColorDialog by remember { mutableStateOf(false) }
     var showSecurityErrorDialog by remember { mutableStateOf(false) }
-    var revealedPin by remember { mutableStateOf("") }
 
-    var isPinLoading by remember { mutableStateOf(false) }
     var isSavingPin by remember { mutableStateOf(false) }
+
+    // Used to queue the target lock mode after PIN is set
+    var pendingLockMode by remember { mutableStateOf<LockMode?>(null) }
 
     Column(
         modifier = Modifier
@@ -104,7 +119,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Restart Button
         OutlinedButton(
             onClick = { restartApp(context) },
             modifier = Modifier.fillMaxWidth(),
@@ -117,23 +131,144 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
         Spacer(Modifier.height(24.dp))
 
-        // --- SECURITY ---
-        SettingsHeader("Security")
+        // --- CRYPTOGRAPHY ---
+        SettingsHeader("Encryption Parameters (Argon2)")
 
-        // App Lock Master Switch
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Warning",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "These settings must match exactly for encryption and decryption. Only change if you know what you are doing.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                // Iterations
+                val iterVal = kdfIterations.roundToInt()
+                val iterLabel = when (iterVal) {
+                    10 -> "(Default)"
+                    in 1..5 -> "(Fast/Weak)"
+                    in 25..32 -> "(Max)"
+                    else -> ""
+                }
+                Text("Iterations: $iterVal $iterLabel", fontWeight = FontWeight.Bold)
+                Text("Higher = Harder to brute force, slower to decrypt.", style = MaterialTheme.typography.bodySmall)
+                Slider(
+                    value = kdfIterations,
+                    onValueChange = { kdfIterations = it },
+                    onValueChangeFinished = { prefs.kdfIterations = kdfIterations.roundToInt() },
+                    valueRange = 1f..32f,
+                    steps = 30
+                )
+
+                val memoryMb = (1 shl kdfMemory.toInt()) / 1024
+                val memLabel = when (memoryMb) {
+                    64 -> "(Default)"
+                    256 -> "(Max)"
+                    else -> ""
+                }
+
+                Text("Memory Cost: ${memoryMb}MB $memLabel", fontWeight = FontWeight.Bold)
+
+                // WARNING LOGIC
+                if (kdfMemory >= 18f) {
+                    Text(
+                        "Warning: 256MB is extremely heavy. May crash older devices.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                Slider(
+                    value = kdfMemory,
+                    onValueChange = { kdfMemory = it },
+                    onValueChangeFinished = { prefs.kdfMemoryPow2 = kdfMemory.roundToInt() },
+                    valueRange = 12f..18f,
+                    steps = 5
+                )
+
+                // Parallelism
+                val paraVal = kdfParallelism.roundToInt()
+                val paraLabel = if (paraVal == 4) "(Default)" else ""
+                Text("Parallelism: $paraVal Threads $paraLabel", fontWeight = FontWeight.Bold)
+                Slider(
+                    value = kdfParallelism,
+                    onValueChange = { kdfParallelism = it },
+                    onValueChangeFinished = { prefs.kdfParallelism = kdfParallelism.roundToInt() },
+                    valueRange = 1f..8f,
+                    steps = 6
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // --- CLIPBOARD & PRIVACY ---
+        SettingsHeader("Privacy & Clipboard")
+
         SettingsItem(
-            title = "App Lock",
-            desc = "Require authentication to enter.",
+            title = "Screen Shield",
+            desc = "Block screenshots and hide content in Recents. (Requires Restart)",
+            trailing = {
+                Switch(checked = screenShield, onCheckedChange = {
+                    screenShield = it
+                    prefs.isScreenShieldEnabled = it
+                })
+            }
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Clipboard Auto-Wipe: ${clipTimeout.toInt()}s", fontWeight = FontWeight.Bold)
+                Slider(
+                    value = clipTimeout,
+                    onValueChange = { clipTimeout = it },
+                    onValueChangeFinished = { prefs.clipboardTimeoutSeconds = clipTimeout.toInt() },
+                    valueRange = 5f..120f,
+                    steps = 22
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // --- APP LOCK ---
+        SettingsHeader("App Lock")
+
+        SettingsItem(
+            title = "Require Authentication",
+            desc = "Lock app on startup/resume.",
             trailing = {
                 Switch(
                     checked = lockMode != LockMode.NONE,
                     onCheckedChange = { enabled ->
                         if (enabled) {
-                            if (BiometricHelper.isDeviceSecure(context)) {
-                                lockMode = LockMode.DEVICE
-                                viewModel.setLockMode(LockMode.DEVICE)
+                            if (viewModel.hasSecurityPinSet()) {
+                                lockMode = LockMode.CUSTOM
+                                viewModel.setLockMode(LockMode.CUSTOM)
                             } else {
-                                showSecurityErrorDialog = true
+                                pendingLockMode = LockMode.CUSTOM
+                                showSetPinDialog = true
                             }
                         } else {
                             lockMode = LockMode.NONE
@@ -144,7 +279,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             }
         )
 
-        // Lock Method Selector (Visible only if Lock is ON)
         AnimatedVisibility(visible = lockMode != LockMode.NONE) {
             Column {
                 Spacer(Modifier.height(12.dp))
@@ -153,46 +287,52 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     selectedIndex = if (lockMode == LockMode.CUSTOM) 1 else 0,
                     onItemSelection = { index ->
                         if (index == 0) {
-                            // Double check if switching back to Device
-                            if (BiometricHelper.isDeviceSecure(context)) {
+                            if (!BiometricHelper.isDeviceSecure(context)) {
+                                showSecurityErrorDialog = true
+                            } else if (!viewModel.hasSecurityPinSet()) {
+                                pendingLockMode = LockMode.DEVICE
+                                showSetPinDialog = true
+                            } else {
                                 lockMode = LockMode.DEVICE
                                 viewModel.setLockMode(LockMode.DEVICE)
-                            } else {
-                                showSecurityErrorDialog = true
                             }
                         } else {
-                            // Trigger Dialog for PIN
-                            showPinDialog = true
+                            if (viewModel.hasSecurityPinSet()) {
+                                lockMode = LockMode.CUSTOM
+                                viewModel.setLockMode(LockMode.CUSTOM)
+                            } else {
+                                pendingLockMode = LockMode.CUSTOM
+                                showSetPinDialog = true
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (lockMode == LockMode.CUSTOM) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            isPinLoading = true
-                            viewModel.retrieveAppPin { pin ->
-                                isPinLoading = false
-                                revealedPin = pin ?: "Not Set"
-                                showViewPinDialog = true
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = !isPinLoading
-                    ) {
-                        if (isPinLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Decrypting...")
-                        } else {
-                            Icon(Icons.Default.Visibility, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("View/Recover PIN")
-                        }
-                    }
+
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = { showVerifyPinDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.VerifiedUser, null, Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Verify My PIN")
                 }
+
+                Spacer(Modifier.height(8.dp))
+
+                TextButton(
+                    onClick = {
+                        pendingLockMode = lockMode
+                        showSetPinDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Change PIN")
+                }
+
                 Spacer(Modifier.height(12.dp))
             }
         }
@@ -232,22 +372,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
         Spacer(Modifier.height(24.dp))
 
-        // --- PRIVACY ---
-        SettingsHeader("Privacy")
-
-        SettingsItem(
-            title = "Screen Shield",
-            desc = "Block screenshots and hide content in Recents. (Requires Restart)",
-            trailing = {
-                Switch(checked = screenShield, onCheckedChange = {
-                    screenShield = it
-                    prefs.isScreenShieldEnabled = it
-                })
-            }
-        )
-
-        Spacer(Modifier.height(24.dp))
-
         // --- APPEARANCE ---
         SettingsHeader("Appearance")
 
@@ -262,7 +386,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             Column {
                 Spacer(Modifier.height(12.dp))
 
-                // THEME COLOR SELECTOR
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable { showColorDialog = true }.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
@@ -276,7 +399,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 }
                 Spacer(Modifier.height(16.dp))
 
-                // DARK MODE (Moved inside this block - Hidden if Dynamic Colors is ON)
                 SettingsItem("Dark Mode", "Force dark theme. (Requires Restart)") {
                     Switch(checked = darkMode, onCheckedChange = {
                         darkMode = it
@@ -291,40 +413,41 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
     // --- DIALOGS ---
 
-    // Security Error Dialog
     if (showSecurityErrorDialog) {
         AlertDialog(
             onDismissRequest = { showSecurityErrorDialog = false },
             icon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Device Security Not Set") },
-            text = { Text("Your device doesn't have a Screen Lock (PIN, Pattern, or Password) enabled.\n\nTo use App Lock, please set a 'Custom PIN' for Sigil.") },
+            text = { Text("Your device doesn't have a Screen Lock (PIN, Pattern, or Password) enabled.\n\nSigil requires this to secure your Biometrics.") },
             confirmButton = {
-                Button(onClick = {
-                    showSecurityErrorDialog = false
-                    showPinDialog = true // Direct to Custom PIN
-                }) { Text("Set Custom PIN") }
-            },
-            dismissButton = { TextButton(onClick = { showSecurityErrorDialog = false }) { Text("Cancel") } }
+                Button(onClick = { showSecurityErrorDialog = false }) { Text("OK") }
+            }
         )
     }
 
-    // Set PIN Dialog
-    if (showPinDialog) {
+    if (showSetPinDialog) {
         var pinInput by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { if(!isSavingPin) { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode } },
+            onDismissRequest = {
+                if(!isSavingPin) {
+                    showSetPinDialog = false
+                    pendingLockMode = null
+                }
+            },
             icon = { Icon(Icons.Default.Lock, null) },
             title = { Text("Set Custom PIN") },
             text = {
                 Column {
-                    Text("Enter a PIN to lock Sigil.")
+                    Text("Enter a PIN to lock Sigil.\nThis will be required if Biometrics fail.")
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
                         value = pinInput,
                         onValueChange = { if (it.length <= 12) pinInput = it },
                         label = { Text("PIN") },
                         singleLine = true,
-                        enabled = !isSavingPin
+                        enabled = !isSavingPin,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
                     )
                 }
             },
@@ -334,10 +457,14 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                         if (pinInput.isNotEmpty()) {
                             isSavingPin = true
                             viewModel.setCustomPin(pinInput)
-                            lockMode = LockMode.CUSTOM
-                            viewModel.setLockMode(LockMode.CUSTOM)
-                            showPinDialog = false
+
+                            val newMode = pendingLockMode ?: LockMode.CUSTOM
+                            lockMode = newMode
+                            viewModel.setLockMode(newMode)
+
+                            showSetPinDialog = false
                             isSavingPin = false
+                            pendingLockMode = null
                         }
                     },
                     enabled = !isSavingPin
@@ -347,30 +474,77 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showPinDialog = false; if (prefs.lockMode != LockMode.CUSTOM) lockMode = prefs.lockMode },
+                    onClick = {
+                        showSetPinDialog = false
+                        pendingLockMode = null
+                        if (!viewModel.hasSecurityPinSet()) {
+                            lockMode = LockMode.NONE
+                            viewModel.setLockMode(LockMode.NONE)
+                        }
+                    },
                     enabled = !isSavingPin
                 ) { Text("Cancel") }
             }
         )
     }
 
-    // View PIN Dialog
-    if (showViewPinDialog) {
+    if (showVerifyPinDialog) {
+        var testInput by remember { mutableStateOf("") }
+        var verificationResult by remember { mutableStateOf<Boolean?>(null) }
+        var isVerifying by remember { mutableStateOf(false) }
+
         AlertDialog(
-            onDismissRequest = { showViewPinDialog = false },
-            title = { Text("Your PIN") },
+            onDismissRequest = { showVerifyPinDialog = false },
+            icon = { Icon(Icons.Default.VerifiedUser, null) },
+            title = { Text("Verify PIN") },
             text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text(revealedPin, fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Stored securely in TEE.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column {
+                    Text("Type your PIN to check if it matches.")
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = testInput,
+                        onValueChange = {
+                            testInput = it
+                            verificationResult = null
+                        },
+                        label = { Text("Enter PIN") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                    )
+
+                    if (verificationResult != null) {
+                        Spacer(Modifier.height(8.dp))
+                        if (verificationResult == true) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Correct!", color = MaterialTheme.colorScheme.primary)
+                            }
+                        } else {
+                            Text("Incorrect", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             },
-            confirmButton = { TextButton(onClick = { showViewPinDialog = false }) { Text("Close") } }
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isVerifying = true
+                        viewModel.verifyAppPin(testInput) { isValid ->
+                            isVerifying = false
+                            verificationResult = isValid
+                        }
+                    },
+                    enabled = !isVerifying && testInput.isNotEmpty()
+                ) {
+                    if (isVerifying) CircularProgressIndicator(Modifier.size(16.dp)) else Text("Check")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showVerifyPinDialog = false }) { Text("Close") } }
         )
     }
 
-    // ADVANCED COLOR PICKER DIALOG
     if (showColorDialog) {
         AdvancedColorPickerDialog(
             initialColor = Color(selectedColorInt),
@@ -384,7 +558,41 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     }
 }
 
-// --- COLOR PICKER COMPONENT ---
+@Composable
+fun SettingsHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+fun SettingsItem(title: String, desc: String, trailing: @Composable () -> Unit) {
+    ListItem(
+        headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
+        supportingContent = { Text(desc) },
+        trailingContent = trailing,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+    )
+}
+
+@Composable
+fun RowScope.RGBField(label: String, value: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { if (it.length <= 3) onValueChange(it) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.weight(1f)
+    )
+}
+
 @Composable
 fun AdvancedColorPickerDialog(
     initialColor: Color,
@@ -420,8 +628,9 @@ fun AdvancedColorPickerDialog(
                 val color = Color(android.graphics.Color.parseColor("#$hex"))
                 currentColor = color
                 android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
+                updateInputs(color)
             }
-        } catch (e: Exception) { }
+        } catch (_: Exception) { }
     }
 
     fun updateFromRGB(r: String, g: String, b: String) {
@@ -433,7 +642,7 @@ fun AdvancedColorPickerDialog(
             currentColor = color
             hexInput = Integer.toHexString(color.toArgb()).uppercase().takeLast(6)
             android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
-        } catch (e: Exception) { }
+        } catch (_: Exception) { }
     }
 
     AlertDialog(
@@ -445,6 +654,7 @@ fun AdvancedColorPickerDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // 1. CIRCULAR WHEEL
+                @Suppress("COMPOSE_APPLIER_CALL_MISMATCH")
                 BoxWithConstraints(
                     modifier = Modifier.size(220.dp),
                     contentAlignment = Alignment.Center
@@ -553,42 +763,6 @@ fun AdvancedColorPickerDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
-}
-
-// --- HELPERS ---
-@Composable
-fun SettingsHeader(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
-    )
-}
-
-@Composable
-fun SettingsItem(title: String, desc: String, trailing: @Composable () -> Unit) {
-    ListItem(
-        headlineContent = { Text(title, fontWeight = FontWeight.Medium) },
-        supportingContent = { Text(desc) },
-        trailingContent = trailing,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
-    )
-}
-
-@Composable
-fun RowScope.RGBField(label: String, value: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { if (it.length <= 3) onValueChange(it) },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.weight(1f)
     )
 }
 

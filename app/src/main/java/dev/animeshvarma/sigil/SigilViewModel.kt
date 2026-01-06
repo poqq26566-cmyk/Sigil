@@ -3,6 +3,12 @@ package dev.animeshvarma.sigil
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ClipDescription
+import android.os.Build
+import android.os.PersistableBundle
+import android.widget.Toast
 import androidx.core.content.edit
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -34,7 +40,7 @@ import kotlin.system.exitProcess
 
 class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repository = KeystoreRepository(application)
+    private val repository by lazy { KeystoreRepository(application) }
     private val prefs = SigilPreferences(application)
     private val _uiState = MutableStateFlow(UiState())
     private val lockManager = LockManager(application)
@@ -49,15 +55,17 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingSharedText: String? = null
 
     init {
-        refreshVault()
+        viewModelScope.launch(Dispatchers.IO) {
+            refreshVault()
+        }
     }
 
     // --- HELPER: KDF CONFIG INJECTION ---
     private fun getUserKdfConfig(): CryptoEngine.KdfConfig {
         return CryptoEngine.KdfConfig(
-            iterations = 10,
-            memoryPow2 = 16,      // 64MB
-            parallelism = 4
+            iterations = prefs.kdfIterations,
+            memoryPow2 = prefs.kdfMemoryPow2,
+            parallelism = prefs.kdfParallelism
         )
     }
 
@@ -293,6 +301,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 errorReport.append("1. Wrong password.\n")
                 errorReport.append("2. Corrupted data.\n")
                 errorReport.append("3. Different Security Settings.\n")
+                errorReport.append("4. Legacy format (Sigil version < v0.4.5).\n")
 
                 val finalMessage = errorReport.toString()
 
@@ -499,22 +508,52 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun wipeAllData() {
+        // TRIGGER LOADING STATE
+        _uiState.update { it.copy(isLoading = true) }
+
         viewModelScope.launch(Dispatchers.IO) {
             val context = getApplication<Application>()
 
-            context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit {
-                this.clear()
+            // 1. WIPE ALL PREFERENCES (Using delete for complete removal)
+            try {
+                context.deleteSharedPreferences("sigil_prefs")
+                context.deleteSharedPreferences("sigil_vault_v3")
+                context.deleteSharedPreferences("sigil_auth")
+            } catch (_: Exception) {
+                // Fallback for older APIs or weird file locks
+                context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit { clear() }
+                context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE).edit { clear() }
+                context.getSharedPreferences("sigil_auth", Context.MODE_PRIVATE).edit { clear() }
             }
 
-            context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE).edit {
-                this.clear()
-            }
-            withContext(Dispatchers.Main) {
-                val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
+            // 2. WIPE HARDWARE KEYSTORE (TEE)
+            try {
+                val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
+                ks.load(null)
+                val aliases = ks.aliases()
+                while (aliases.hasMoreElements()) {
+                    val alias = aliases.nextElement()
+                    ks.deleteEntry(alias)
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 3. WIPE INTERNAL STORAGE
+            try {
+                context.cacheDir.deleteRecursively()
+                context.filesDir.deleteRecursively()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
+            // 4. RESTART APP
+            withContext(Dispatchers.Main) {
+                val packageManager = context.packageManager
+                val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+                val componentName = intent?.component
+                val mainIntent = Intent.makeRestartActivityTask(componentName)
+                context.startActivity(mainIntent)
                 exitProcess(0)
             }
         }
@@ -528,12 +567,53 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPrefs() = prefs
 
-    fun lockAppImmediately() {
-        lockManager.resetGracePeriod()
-        _uiState.update { it.copy(isLoading = false) } // Safety reset
-    }
-
     fun hasSecurityPinSet(): Boolean {
         return lockManager.hasPinSet()
+    }
+
+    // --- CLIPBOARD SECURITY ---
+    fun copyToClipboardSecurely(text: String, label: String = "Sigil Content") {
+        if (text.isBlank()) return
+
+        val context = getApplication<Application>()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+        // 1. Create ClipData
+        val clip = ClipData.newPlainText(label, text)
+
+        // 2. Android 13+ Sensitive Flag (Prevents screenshot/preview of the clipboard overlay)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+            }
+        }
+
+        clipboard.setPrimaryClip(clip)
+
+        // 3. User Feedback & Timer
+        val timeout = prefs.clipboardTimeoutSeconds
+        Toast.makeText(context, "Copied! Wiping in ${timeout}s", Toast.LENGTH_SHORT).show()
+        addLog("Sensitive data copied to clipboard.")
+
+        // 4. Schedule Auto-Wipe
+        viewModelScope.launch(Dispatchers.Main) {
+            delay(timeout * 1000L)
+
+            try {
+
+                if (clipboard.hasPrimaryClip() && clipboard.primaryClipDescription?.label == label) {
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        clipboard.clearPrimaryClip()
+                    } else {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+                    }
+
+                    Toast.makeText(context, "Sigil: Clipboard auto-wiped.", Toast.LENGTH_SHORT).show()
+                    addLog("Clipboard auto-wiped.")
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 }

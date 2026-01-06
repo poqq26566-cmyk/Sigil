@@ -1,12 +1,9 @@
 package dev.animeshvarma.sigil.ui
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -16,7 +13,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -47,12 +43,13 @@ fun SigilApp(
     val uiState by viewModel.uiState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
+    // Programmatic Drawer Control (for Demo/Onboarding)
     LaunchedEffect(uiState.isDemoDrawerOpen) {
         if (uiState.isDemoDrawerOpen) {
             drawerState.open()
         } else {
+            // Only close if it's actually open to avoid state thrashing
             if (drawerState.isOpen) drawerState.close()
         }
     }
@@ -113,9 +110,9 @@ fun SigilApp(
                                 stiffness = AnimationConfig.STIFFNESS,
                                 dampingRatio = AnimationConfig.DAMPING
                             )
-
-                            fadeIn(animationSpec = screenSpring) + scaleIn(initialScale = 0.95f, animationSpec = screenSpring) togetherWith
-                                    fadeOut(animationSpec = screenSpring)
+                            // Physics-based transition: Scale + Fade
+                            (fadeIn(animationSpec = screenSpring) + scaleIn(initialScale = 0.95f, animationSpec = screenSpring))
+                                .togetherWith(fadeOut(animationSpec = screenSpring) + scaleOut(targetScale = 1.05f, animationSpec = screenSpring))
                         },
                         label = "ScreenTransition"
                     ) { target ->
@@ -125,6 +122,7 @@ fun SigilApp(
                             AppScreen.STEGANOGRAPHY -> SteganographyScreen()
                             AppScreen.KEYSTORE -> KeystoreScreen(viewModel)
                             AppScreen.SETTINGS -> SettingsScreen(viewModel)
+                            // Feature Flags: Render "Under Construction" for v0.5 modules
                             AppScreen.HEADERLESS,
                             AppScreen.FILE_ENCRYPTION,
                             AppScreen.ASYMMETRIC,
@@ -135,13 +133,13 @@ fun SigilApp(
                 }
             }
 
-            // The Expressive Shape-Shifting Loader
+            // The Expressive Shape-Shifting Loader (Requires Material3 1.5.0-alpha11+)
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
-                        .clickable(enabled = false) {},
+                        .clickable(enabled = false) {}, // Block clicks
                     contentAlignment = Alignment.Center
                 ) {
                     LoadingIndicator(
@@ -158,10 +156,7 @@ fun SigilApp(
                 onClear = { viewModel.clearLogs() },
                 onCopyLogs = {
                     val fullLog = uiState.logs.joinToString("\n")
-                    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                    val clip = android.content.ClipData.newPlainText("Sigil Logs", fullLog)
-                    clipboard.setPrimaryClip(clip)
-                    viewModel.addLog("Full logs copied")
+                    viewModel.copyToClipboardSecurely(fullLog, "Sigil Logs")
                 }
             )
         }
@@ -197,11 +192,11 @@ fun HomeContent(viewModel: SigilViewModel, uiState: UiState) {
                 targetState = uiState.selectedMode,
                 transitionSpec = {
                     if (targetState == SigilMode.CUSTOM) {
-                        slideInHorizontally(animationSpec = slideSpring) { it } + fadeIn() togetherWith
-                                slideOutHorizontally(animationSpec = slideSpring) { -it } + fadeOut()
+                        (slideInHorizontally(animationSpec = slideSpring) { it } + fadeIn())
+                            .togetherWith(slideOutHorizontally(animationSpec = slideSpring) { -it } + fadeOut())
                     } else {
-                        slideInHorizontally(animationSpec = slideSpring) { -it } + fadeIn() togetherWith
-                                slideOutHorizontally(animationSpec = slideSpring) { it } + fadeOut()
+                        (slideInHorizontally(animationSpec = slideSpring) { -it } + fadeIn())
+                            .togetherWith(slideOutHorizontally(animationSpec = slideSpring) { it } + fadeOut())
                     }
                 },
                 label = "TabTransition"

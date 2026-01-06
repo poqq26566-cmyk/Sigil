@@ -47,9 +47,9 @@ import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.AlgorithmRegistry
 import dev.animeshvarma.sigil.model.UiState
+import dev.animeshvarma.sigil.ui.components.SecurePasswordInput
 import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
 import dev.animeshvarma.sigil.ui.components.StyledLayerContainer
-import dev.animeshvarma.sigil.ui.components.SecurePasswordInput
 import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -63,7 +63,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     val listState = rememberLazyListState()
     val vaultEntries by viewModel.vaultEntries.collectAsState()
 
-    // Spacing
+    // Layout Constants
     val spaceBetweenTopSections = 16.dp
     val spaceLayersToInput = 10.dp
     val spaceInputToPass = 10.dp
@@ -73,7 +73,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     Column(modifier = Modifier.fillMaxHeight()) {
         Spacer(modifier = Modifier.height(7.dp))
 
-        // Compression
+        // Compression Toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -104,11 +104,11 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Layers", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Cipher Cascade", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SmallFloatingActionButton(
                     onClick = { showAddLayerSheet = true },
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.primary,
                     elevation = FloatingActionButtonDefaults.elevation(0.dp),
                     modifier = Modifier.size(32.dp)
                 ) {
@@ -118,7 +118,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Scrollable Area
+            // Scrollable Layer List
             val showFadingEdge = uiState.customLayers.size > 3
 
             Box(
@@ -136,10 +136,10 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                 ) {
                     itemsIndexed(
                         items = uiState.customLayers,
-                        key = { _, entry -> entry.id }
+                        key = { _, entry -> entry.id } // Stable ID for animation
                     ) { index, entry ->
 
-                        // Local Animation State
+                        // Pop Animation Logic
                         val scale = remember { Animatable(1f) }
                         val elevation = remember { Animatable(0f) }
                         val scope = rememberCoroutineScope()
@@ -190,19 +190,20 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                 }
 
                 if (uiState.customLayers.isEmpty()) {
-                    Text(
-                        "No encryption layers added.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(4.dp)
-                    )
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "No encryption layers selected.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(spaceLayersToInput))
 
-        // Inputs
+        // Input Field
         OutlinedTextField(
             value = uiState.customInput,
             onValueChange = { viewModel.onInputTextChanged(it) },
@@ -219,6 +220,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
         Spacer(modifier = Modifier.height(spaceInputToPass))
 
+        // Password Input
         SecurePasswordInput(
             value = uiState.customPassword,
             onValueChange = { viewModel.onPasswordChanged(it) },
@@ -232,7 +234,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
         Spacer(modifier = Modifier.height(spacePassToButtons))
 
-        // Actions
+        // Action Buttons
         SigilButtonGroup(
             onLogs = { viewModel.onLogsClicked() },
             onEncrypt = { viewModel.onEncrypt() },
@@ -241,7 +243,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
         Spacer(modifier = Modifier.height(spaceButtonsToOutput))
 
-        // Output
+        // Output Field
         OutlinedTextField(
             value = uiState.customOutput,
             onValueChange = {},
@@ -277,11 +279,9 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                     }
 
                     IconButton(onClick = {
+                        // SECURE CLIPBOARD COPY
                         if (uiState.customOutput.isNotEmpty()) {
-                            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
-                            val clip = android.content.ClipData.newPlainText("Sigil Output", uiState.customOutput)
-                            clipboard.setPrimaryClip(clip)
-                            viewModel.addLog("Copied to clipboard")
+                            viewModel.copyToClipboardSecurely(uiState.customOutput, "Sigil Output")
                         }
                     }) {
                         Icon(
@@ -308,7 +308,7 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     }
 }
 
-// MovableLayerItem
+// Movable Layer Row
 @Composable
 fun MovableLayerItem(
     index: Int,
@@ -326,7 +326,12 @@ fun MovableLayerItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Layer ${index + 1}: $name", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(
+                "Layer ${index + 1}: $name",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onMoveUp, enabled = index > 0, modifier = Modifier.size(24.dp)) {
@@ -344,6 +349,7 @@ fun MovableLayerItem(
     }
 }
 
+// Add Layer Sheet
 @Composable
 fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
@@ -384,7 +390,7 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search algorithms...") },
+            placeholder = { Text("Search (e.g. AES, Serpent)...") },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = { IconButton(onClick = { focusManager.clearFocus() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Done") } },
             modifier = Modifier.fillMaxWidth(),
@@ -414,19 +420,40 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
                     val engineEnum = CryptoEngine.Algorithm.valueOf(algoData.id)
                     val isSelected = selectedAlgos.contains(engineEnum)
 
+                    // WARNING LOGIC: Flag weak ciphers
+                    val isWeak = algoData.isWeak
+                    val containerColor = when {
+                        isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                        isWeak -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                    }
+
                     Surface(
                         modifier = Modifier.padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)),
-                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
+                        color = containerColor
                     ) {
                         ListItem(
                             headlineContent = {
-                                Text(
-                                    algoData.name,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        algoData.name,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (isWeak) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             },
-                            supportingContent = { Text(algoData.description) },
+                            supportingContent = {
+                                Column {
+                                    Text(algoData.description)
+                                    if (isWeak) {
+                                        Text(algoData.securityWarning ?: "Weak Cipher", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            },
                             trailingContent = {
                                 Checkbox(
                                     checked = isSelected,
@@ -465,7 +492,6 @@ fun Modifier.simpleVerticalScrollbar(
     return drawWithContent {
         drawContent()
 
-        val firstVisibleElementIndex = state.firstVisibleItemIndex
         val needDrawScrollbar = state.isScrollInProgress || alpha > 0.0f
 
         if (needDrawScrollbar) {
@@ -473,8 +499,12 @@ fun Modifier.simpleVerticalScrollbar(
             if (totalItems == 0) return@drawWithContent
 
             val elementHeight = this.size.height / totalItems
+            val firstVisibleElementIndex = state.firstVisibleItemIndex
+            val visibleItemsCount = state.layoutInfo.visibleItemsInfo.size
+
+            // Calculate scrollbar
             val scrollbarOffsetY = firstVisibleElementIndex * elementHeight
-            val scrollbarHeight = state.layoutInfo.visibleItemsInfo.size * elementHeight
+            val scrollbarHeight = visibleItemsCount * elementHeight
 
             drawRoundRect(
                 color = Color.Gray.copy(alpha = 0.5f * alpha),
