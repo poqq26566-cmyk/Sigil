@@ -30,7 +30,6 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
             value = uiState.autoInput,
             onValueChange = { viewModel.onInputTextChanged(it) },
             label = { Text("Input Text") },
-            placeholder = { Text("Input Text...") },
             modifier = Modifier.weight(1f).fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
             colors = OutlinedTextFieldDefaults.colors(
