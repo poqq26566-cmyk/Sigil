@@ -1,16 +1,25 @@
 package dev.animeshvarma.sigil.data
 
 import android.content.Context
+import android.util.Base64
+import androidx.core.content.edit
+import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.util.SecureMemory
 import dev.animeshvarma.sigil.util.SigilPreferences
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 class LockManager(context: Context) {
 
     private val prefs = SigilPreferences(context)
-    private val repository = KeystoreRepository(context)
+
+    private val authPrefs = context.getSharedPreferences("sigil_auth", Context.MODE_PRIVATE)
 
     companion object {
-        private const val APP_PIN_ALIAS = "_SIGIL_APP_ACCESS_PIN"
+        private const val KEY_PIN_HASH = "AUTH_PIN_HASH"
+        private const val KEY_PIN_SALT = "AUTH_PIN_SALT"
+        private const val SALT_SIZE = 16
     }
 
     // --- STATE CHECKS ---
@@ -35,20 +44,63 @@ class LockManager(context: Context) {
         prefs.lastBackgroundTimestamp = System.currentTimeMillis()
     }
 
-    // --- PIN MANAGEMENT (TEE Encrypted) ---
+    fun resetGracePeriod() {
+        prefs.lastBackgroundTimestamp = 0L
+    }
+
+    // --- PIN MANAGEMENT (Argon2 Hashing) ---
     fun setCustomPin(pin: String) {
-        // Score/Label are placeholders as this is internal
-        repository.saveToVault(APP_PIN_ALIAS, pin, 100, "Internal")
-        prefs.lockMode = LockMode.CUSTOM
+        val pinChars = pin.toCharArray()
+
+        // 1. Generate Random Salt
+        val salt = ByteArray(SALT_SIZE)
+        SecureRandom().nextBytes(salt)
+
+        try {
+            // 2. Calculate Argon2 Hash
+            val hash = CryptoEngine.hashPin(pinChars, salt)
+
+            // 3. Store Base64 encoded Salt and Hash
+            authPrefs.edit {
+                putString(KEY_PIN_SALT, Base64.encodeToString(salt, Base64.NO_WRAP))
+                putString(KEY_PIN_HASH, Base64.encodeToString(hash, Base64.NO_WRAP))
+            }
+
+            // 4. Enable Lock Mode
+            prefs.lockMode = LockMode.CUSTOM
+
+        } finally {
+            // 5. Cleanup
+            SecureMemory.wipe(pinChars)
+        }
     }
 
     fun verifyPin(inputPin: String): Boolean {
-        // Load decrypted PIN from TEE
-        val storedPin = repository.loadFromVault(APP_PIN_ALIAS)
-        return storedPin == inputPin
+        // 1. Load Salt
+        val saltString = authPrefs.getString(KEY_PIN_SALT, null) ?: return false
+        val storedHashString = authPrefs.getString(KEY_PIN_HASH, null) ?: return false
+
+        val salt = Base64.decode(saltString, Base64.NO_WRAP)
+        val storedHash = Base64.decode(storedHashString, Base64.NO_WRAP)
+
+        val inputChars = inputPin.toCharArray()
+
+        return try {
+            // 2. Hash the Input using stored Salt
+            val inputHash = CryptoEngine.hashPin(inputChars, salt)
+
+            // 3. Constant-Time Comparison
+            MessageDigest.isEqual(storedHash, inputHash)
+
+        } catch (_: Exception) {
+            false
+        } finally {
+            // 4. Wipe Input
+            SecureMemory.wipe(inputChars)
+        }
     }
 
-    fun getStoredPin(): String? {
-        return repository.loadFromVault(APP_PIN_ALIAS)
+    fun hasPinSet(): Boolean {
+        return authPrefs.contains(KEY_PIN_HASH) && authPrefs.contains(KEY_PIN_SALT)
     }
 }

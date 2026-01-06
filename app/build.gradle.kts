@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "dev.animeshvarma.sigil"
-    compileSdk = 36
+    compileSdk = 36 // Latest Android 16 (Baklava)
 
     defaultConfig {
         applicationId = "dev.animeshvarma.sigil"
@@ -51,44 +51,39 @@ android {
 }
 
 dependencies {
-    // Core Android
+    // --- Core Android ---
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.activity:activity-compose:1.12.1")
+    implementation("androidx.activity:activity-compose:1.12.2")
+    implementation("androidx.appcompat:appcompat:1.7.1")
 
-    // Compose BOM (Bill of Materials) - Latest Stable
-    implementation(platform("androidx.compose:compose-bom:2024.11.00"))
-
-    // Core UI
+    // --- Compose (UI) ---
+    implementation(platform("androidx.compose:compose-bom:2025.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.material:material")
-    implementation("androidx.compose.material3:material3:1.4.0-alpha04")
+    implementation("androidx.compose.material3:material3:1.4.0")
 
+    // --- Logic & Data ---
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
-    // Logic
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // --- Crypto ---
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
 
-    // Crypto
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.81")
+    // --- Biometric ---
+    implementation("androidx.biometric:biometric:1.4.0-alpha05")
 
-    // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation(libs.androidx.benchmark.common)
-    implementation(libs.material)
+    // --- Coroutines ---
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
-    // Testing
+    // --- Testing ---
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.11.00"))
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-
 }

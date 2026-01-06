@@ -20,11 +20,13 @@ import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.util.SecureMemory
 import dev.animeshvarma.sigil.util.SigilPreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,6 +38,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = SigilPreferences(application)
     private val _uiState = MutableStateFlow(UiState())
     private val lockManager = LockManager(application)
+
     val uiState: StateFlow<UiState> = _uiState
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
@@ -44,6 +47,19 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     val vaultEntries: StateFlow<List<VaultEntry>> = _vaultEntries
 
     private var pendingSharedText: String? = null
+
+    init {
+        refreshVault()
+    }
+
+    // --- HELPER: KDF CONFIG INJECTION ---
+    private fun getUserKdfConfig(): CryptoEngine.KdfConfig {
+        return CryptoEngine.KdfConfig(
+            iterations = 10,
+            memoryPow2 = 16,      // 64MB
+            parallelism = 4
+        )
+    }
 
     fun cachePendingIntent(text: String) {
         pendingSharedText = text
@@ -55,10 +71,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             handleIncomingSharedText(text)
             pendingSharedText = null
         }
-    }
-
-    init {
-        refreshVault()
     }
 
     private fun refreshVault() {
@@ -169,7 +181,15 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // TRIGGER LOADING
         _uiState.update { it.copy(isLoading = true) }
+
+        // AGGRESSIVE WIPE: Clear password from UI immediately so it doesn't linger in View State
+        _uiState.update {
+            if (it.selectedMode == SigilMode.AUTO) it.copy(autoPassword = "")
+            else it.copy(customPassword = "")
+        }
+
         addLog("Encryption process started.")
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -181,11 +201,13 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 if (state.selectedMode == SigilMode.AUTO) {
                     chain = listOf(
                         CryptoEngine.Algorithm.AES_GCM,
+                        CryptoEngine.Algorithm.CHACHA20_POLY1305,
                         CryptoEngine.Algorithm.TWOFISH_CBC,
                         CryptoEngine.Algorithm.SERPENT_CBC
                     ).shuffled()
+
                     compress = true
-                    addLog("Auto Mode: Randomized layer sequence.")
+                    addLog("Auto Mode: 4-Layer Hybrid Chain (AES+ChaCha+Twofish+Serpent).")
                 } else {
                     chain = state.customLayers.map { it.algorithm }
                     compress = state.isCompressionEnabled
@@ -194,9 +216,10 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 if (chain.isEmpty()) throw Exception("No encryption layers selected.")
 
                 val result = CryptoEngine.encrypt(
-                    data = input.toByteArray(java.nio.charset.StandardCharsets.UTF_8),
+                    data = input.toByteArray(StandardCharsets.UTF_8),
                     password = pwdChars,
                     algorithms = chain,
+                    kdfConfig = getUserKdfConfig(),
                     compress = compress,
                     logCallback = { addLog(it) }
                 )
@@ -208,10 +231,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     else it.copy(customOutput = result, isLoading = false)
                 }
-            } catch (e: Exception) {
-                addLog("Error: ${e.message}")
+            } catch (_: Exception) {
+                addLog("Error: Encryption failed.")
                 _uiState.update { it.copy(isLoading = false) }
-                e.printStackTrace()
             } finally {
                 SecureMemory.wipe(pwdChars)
             }
@@ -234,6 +256,13 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         _uiState.update { it.copy(isLoading = true) }
+
+        // AGGRESSIVE WIPE: Clear password from UI immediately
+        _uiState.update {
+            if (it.selectedMode == SigilMode.AUTO) it.copy(autoPassword = "")
+            else it.copy(customPassword = "")
+        }
+
         addLog("Decryption process started.")
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -242,48 +271,28 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 val decryptedBytes = CryptoEngine.decrypt(
                     encryptedData = input,
                     password = pwdChars,
+                    kdfConfig = getUserKdfConfig(),
                     logCallback = { addLog(it) }
                 )
 
-                val decryptedString = String(decryptedBytes, java.nio.charset.StandardCharsets.UTF_8)
+                val decryptedString = String(decryptedBytes, StandardCharsets.UTF_8)
+                SecureMemory.wipe(decryptedBytes)
 
                 _uiState.update {
                     if (it.selectedMode == SigilMode.AUTO) it.copy(
-                        autoOutput = decryptedString, // FIX: Pass String, not ByteArray
+                        autoOutput = decryptedString,
                         isLoading = false
                     )
                     else it.copy(customOutput = decryptedString, isLoading = false)
                 }
 
-            } catch (e: Exception) {
-                val errorMsg = e.message ?: "Unknown Error"
-                addLog("Error: $errorMsg")
-
-                // UI FEEDBACK (FAILURE REPORT)
+            } catch (_: Exception) {
                 val errorReport = StringBuilder()
-                errorReport.append("DECRYPTION FAILED\n")
-
-                when (errorMsg) {
-                    "HMAC Verification Failed." -> {
-                        errorReport.append("Reason: Integrity Check Failed.\n\n")
-                        errorReport.append("Possible Causes:\n")
-                        errorReport.append("1. Wrong password (Try typing the password again)\n")
-                        errorReport.append("2. The text was tampered with.\n")
-                    }
-
-                    "Container Corrupted or Invalid Format.",
-                    "Data corrupted (Size too small)." -> {
-                        errorReport.append("Reason: Invalid Data Format.\n\n")
-                        errorReport.append("POSSIBLE CAUSES:\n")
-                        errorReport.append("1. Missing characters in input.\n")
-                        errorReport.append("2. Input is not a Sigil-encrypted string.\n")
-                    }
-
-                    else -> {
-                        errorReport.append("Reason: System Error.\n")
-                        errorReport.append("Details: $errorMsg\n")
-                    }
-                }
+                errorReport.append("DECRYPTION FAILED\n\n")
+                errorReport.append("POSSIBLE CAUSES:\n")
+                errorReport.append("1. Wrong password.\n")
+                errorReport.append("2. Corrupted data.\n")
+                errorReport.append("3. Different Security Settings.\n")
 
                 val finalMessage = errorReport.toString()
 
@@ -294,6 +303,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     else it.copy(customOutput = finalMessage, isLoading = false)
                 }
+
+                addLog("Decryption Failed: Integrity check or Password mismatch.")
             } finally {
                 SecureMemory.wipe(pwdChars)
             }
@@ -314,11 +325,16 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val entropy = SecureMemory.calculateEntropy(password)
-            repository.saveToVault(alias, password, entropy.score, entropy.label)
-            refreshVault()
-            addLog("Key saved to Vault as '$alias'.")
-            _uiState.update { it.copy(isLoading = false) }
+            val pwdChars = password.toCharArray()
+            try {
+                val entropy = SecureMemory.calculateEntropy(password)
+                repository.saveToVault(alias, pwdChars, entropy.score, entropy.label)
+                refreshVault()
+                addLog("Key saved to Vault as '$alias'.")
+            } finally {
+                SecureMemory.wipe(pwdChars)
+                _uiState.update { it.copy(isLoading = false) }
+            }
         }
     }
 
@@ -333,7 +349,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 addLog("Error: Failed to decrypt key.")
             }
-            _uiState.update { it.copy(isLoading = false) } // HIDE LOADING
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
@@ -374,7 +390,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 // --- DEMO / ONBOARDING CONTROL ---
-
     // 1. Control the Docs Tab programmatically
     private val _demoDocsTabIndex = MutableStateFlow(0)
     val demoDocsTabIndex: StateFlow<Int> = _demoDocsTabIndex
@@ -453,34 +468,27 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setCustomPin(pin: String) {
-        // TRIGGER GLOBAL LOADING
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
             lockManager.setCustomPin(pin)
-
-            // Simulating a small delay for UX so the loader is visible
-            kotlinx.coroutines.delay(500)
+            delay(500)
 
             withContext(Dispatchers.Main) {
                 addLog("Custom Security PIN set (TEE Encrypted).")
-                // STOP LOADING
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
     fun verifyAppPin(input: String, onResult: (Boolean) -> Unit) {
-        // TRIGGER GLOBAL LOADING
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
             val isValid = lockManager.verifyPin(input)
 
-            // Delay for UX feedback
-            if (!isValid) kotlinx.coroutines.delay(500)
+            if (!isValid) delay(1000)
 
-            // STOP LOADING
             _uiState.update { it.copy(isLoading = false) }
 
             withContext(Dispatchers.Main) {
@@ -489,18 +497,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun retrieveAppPin(onResult: (String?) -> Unit) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val pin = lockManager.getStoredPin()
-            withContext(Dispatchers.Main) {
-                onResult(pin)
-            }
-        }
-    }
 
     fun wipeAllData() {
         viewModelScope.launch(Dispatchers.IO) {
-            // Nuke Preferences files directly
             val context = getApplication<Application>()
 
             context.getSharedPreferences("sigil_prefs", Context.MODE_PRIVATE).edit {
@@ -511,7 +510,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 this.clear()
             }
             withContext(Dispatchers.Main) {
-                // Restart App Process to reset all state
                 val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -522,13 +520,20 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- APPEARANCE SETTINGS ---
     fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }
     fun setDarkMode(enabled: Boolean) { prefs.isDarkModeEnabled = enabled }
     fun setThemeColor(color: Color) {
         prefs.selectedThemeColor = color.toArgb()
     }
 
-    // --- ACCESSORS for UI (to initialize state) ---
     fun getPrefs() = prefs
+
+    fun lockAppImmediately() {
+        lockManager.resetGracePeriod()
+        _uiState.update { it.copy(isLoading = false) } // Safety reset
+    }
+
+    fun hasSecurityPinSet(): Boolean {
+        return lockManager.hasPinSet()
+    }
 }

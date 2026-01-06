@@ -5,8 +5,10 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.util.SecureMemory
+import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.Arrays
@@ -15,7 +17,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-// Data Model for a stored key
 data class VaultEntry(
     val alias: String,
     val timestamp: Long,
@@ -27,28 +28,12 @@ class KeystoreRepository(context: Context) {
 
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private val prefs: SharedPreferences = context.getSharedPreferences("sigil_vault_v3", Context.MODE_PRIVATE)
-    private val INTERNAL_PREFIX = "_SIGIL_"
-
-    // Constants
-    private val HARDWARE_ALIAS = "SIGIL_HARDWARE_WRAPPER"
-    private val VAULT_KEY_PREF = "ENCRYPTED_VAULT_SEED"
-
-    // The "Trio" Chain used to encrypt the user's keys on disk
-    private val STORAGE_ALGORITHMS = listOf(
-        CryptoEngine.Algorithm.AES_GCM,
-        CryptoEngine.Algorithm.TWOFISH_CBC,
-        CryptoEngine.Algorithm.SERPENT_CBC
-    )
 
     init {
         ensureVaultInitialized()
     }
 
-    /**
-     * Ensures a random 256-bit "Vault Seed" exists.
-     * This seed is generated once, encrypted by the Hardware Keystore, and saved to prefs.
-     * It acts as the "Master Password" for all saved keys.
-     */
+
     private fun ensureVaultInitialized() {
         if (!prefs.contains(VAULT_KEY_PREF)) {
             // 1. Generate Hardware Wrapper Key
@@ -81,21 +66,19 @@ class KeystoreRepository(context: Context) {
             // 4. Pack (IV + EncryptedData) & Save
             val blob = ByteArray(1 + iv.size + encryptedSeed.size)
             blob[0] = iv.size.toByte()
-            System.arraycopy(iv, 0, blob, 1, iv.size)
-            System.arraycopy(encryptedSeed, 0, blob, 1 + iv.size, encryptedSeed.size)
 
-            prefs.edit().putString(VAULT_KEY_PREF, Base64.encodeToString(blob, Base64.NO_WRAP)).apply()
+            iv.copyInto(blob, destinationOffset = 1)
+            encryptedSeed.copyInto(blob, destinationOffset = 1 + iv.size)
+
+            prefs.edit {
+                putString(VAULT_KEY_PREF, Base64.encodeToString(blob, Base64.NO_WRAP))
+            }
 
             // 5. Wipe memory
             Arrays.fill(vaultSeed, 0.toByte())
         }
     }
 
-    /**
-     * Unwraps the Hardware-Encrypted Seed to get the usable Vault Key.
-     * Converts the random bytes into a Hex CharArray to be used as a password.
-     * IMPORTANT: CALLER MUST WIPE THE RESULT AFTER USE.
-     */
     private fun getVaultKey(): CharArray {
         val base64Blob = prefs.getString(VAULT_KEY_PREF, null)
             ?: throw IllegalStateException("Vault corrupted: Master Seed missing.")
@@ -107,8 +90,8 @@ class KeystoreRepository(context: Context) {
         val iv = ByteArray(ivSize)
         val encryptedSeed = ByteArray(blob.size - 1 - ivSize)
 
-        System.arraycopy(blob, 1, iv, 0, ivSize)
-        System.arraycopy(blob, 1 + ivSize, encryptedSeed, 0, encryptedSeed.size)
+        blob.copyInto(iv, destinationOffset = 0, startIndex = 1, endIndex = 1 + ivSize)
+        blob.copyInto(encryptedSeed, destinationOffset = 0, startIndex = 1 + ivSize, endIndex = blob.size)
 
         // Decrypt using Hardware Key
         val hwKey = keyStore.getKey(HARDWARE_ALIAS, null) as SecretKey
@@ -126,10 +109,7 @@ class KeystoreRepository(context: Context) {
         return hexChars
     }
 
-    /**
-     * Encrypts and saves a user's key/password to the vault.
-     */
-    fun saveToVault(alias: String, secret: String, score: Int, label: String) {
+    fun saveToVault(alias: String, secret: CharArray, score: Int, label: String) {
         if (prefs.contains("DATA_$alias")) {
             deleteEntry(alias)
         }
@@ -137,39 +117,45 @@ class KeystoreRepository(context: Context) {
         val vaultKey = getVaultKey()
 
         try {
+            val secretBytes = toBytes(secret)
+
             val encryptedBlob = CryptoEngine.encrypt(
-                data = secret.toByteArray(java.nio.charset.StandardCharsets.UTF_8),
+                data = secretBytes,
                 password = vaultKey,
                 algorithms = STORAGE_ALGORITHMS,
-                compress = false
+                kdfConfig = VAULT_KDF_CONFIG,
+                compress = false,
+                logCallback = {}
             )
 
-            prefs.edit()
-                .putString("DATA_$alias", encryptedBlob)
-                .putLong("TIME_$alias", System.currentTimeMillis())
-                .putInt("SCORE_$alias", score)
-                .putString("LABEL_$alias", label)
-                .apply()
+            Arrays.fill(secretBytes, 0.toByte())
+
+            prefs.edit {
+                putString("DATA_$alias", encryptedBlob)
+                putLong("TIME_$alias", System.currentTimeMillis())
+                putInt("SCORE_$alias", score)
+                putString("LABEL_$alias", label)
+            }
 
         } finally {
             SecureMemory.wipe(vaultKey)
         }
     }
 
-    /**
-     * Retrieves and decrypts a key/password from the vault.
-     */
     fun loadFromVault(alias: String): String? {
         val encryptedBlob = prefs.getString("DATA_$alias", null) ?: return null
         val vaultKey = getVaultKey()
 
         return try {
-            // FIX: Decrypt returns ByteArray, convert back to String
             val decryptedBytes = CryptoEngine.decrypt(
                 encryptedData = encryptedBlob,
-                password = vaultKey
+                password = vaultKey,
+                kdfConfig = VAULT_KDF_CONFIG,
+                logCallback = {}
             )
-            String(decryptedBytes, java.nio.charset.StandardCharsets.UTF_8)
+            val result = String(decryptedBytes, StandardCharsets.UTF_8)
+            Arrays.fill(decryptedBytes, 0.toByte())
+            result
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -178,26 +164,22 @@ class KeystoreRepository(context: Context) {
         }
     }
 
-    /**
-     * Renames an entry by decrypting it and re-saving it under a new alias.
-     */
     fun renameEntry(oldAlias: String, newAlias: String): Boolean {
         if (oldAlias == newAlias) return true
 
-        val secret = loadFromVault(oldAlias) ?: return false
+        val secretString = loadFromVault(oldAlias) ?: return false
+        val secretChars = secretString.toCharArray()
         val score = prefs.getInt("SCORE_$oldAlias", 0)
         val label = prefs.getString("LABEL_$oldAlias", "Unknown") ?: "Unknown"
 
-        saveToVault(newAlias, secret, score, label)
+        saveToVault(newAlias, secretChars, score, label)
 
+        SecureMemory.wipe(secretChars)
         deleteEntry(oldAlias)
 
         return true
     }
 
-    /**
-     * Returns a list of all stored keys (Metadata only).
-     */
     fun getEntries(): List<VaultEntry> {
         return prefs.all.keys
             .filter { it.startsWith("DATA_") }
@@ -215,19 +197,16 @@ class KeystoreRepository(context: Context) {
             .sortedByDescending { it.timestamp }
     }
 
-    /**
-     * Deletes a specific entry from storage.
-     */
     fun deleteEntry(alias: String) {
-        prefs.edit()
-            .remove("DATA_$alias")
-            .remove("TIME_$alias")
-            .remove("SCORE_$alias")
-            .remove("LABEL_$alias")
-            .apply()
+        prefs.edit {
+            remove("DATA_$alias")
+            remove("TIME_$alias")
+            remove("SCORE_$alias")
+            remove("LABEL_$alias")
+        }
     }
 
-    // Helper: Bytes to Hex CharArray
+    // --- Helpers ---
     private fun toHex(bytes: ByteArray): CharArray {
         val hexChars = CharArray(bytes.size * 2)
         for (j in bytes.indices) {
@@ -238,7 +217,34 @@ class KeystoreRepository(context: Context) {
         return hexChars
     }
 
+    private fun toBytes(chars: CharArray): ByteArray {
+        val charBuffer = java.nio.CharBuffer.wrap(chars)
+        val byteBuffer = StandardCharsets.UTF_8.encode(charBuffer)
+
+        val bytes = byteBuffer.array().copyOfRange(byteBuffer.position(), byteBuffer.limit())
+        byteBuffer.array().fill(0.toByte())
+
+        return bytes
+    }
+
     companion object {
+        private const val INTERNAL_PREFIX = "_SIGIL_"
+        private const val HARDWARE_ALIAS = "SIGIL_HARDWARE_WRAPPER"
+        private const val VAULT_KEY_PREF = "ENCRYPTED_VAULT_SEED"
+
         private val hexArray = "0123456789ABCDEF".toCharArray()
+
+        private val STORAGE_ALGORITHMS = listOf(
+            CryptoEngine.Algorithm.AES_GCM,
+            CryptoEngine.Algorithm.CHACHA20_POLY1305,
+            CryptoEngine.Algorithm.TWOFISH_CBC,
+            CryptoEngine.Algorithm.SERPENT_CBC
+        )
+
+        private val VAULT_KDF_CONFIG = CryptoEngine.KdfConfig(
+            iterations = 10,
+            memoryPow2 = 18,
+            parallelism = 4
+        )
     }
 }

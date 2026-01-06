@@ -42,35 +42,32 @@ class MainActivity : AppCompatActivity() {
         prefs = SigilPreferences(this)
         lockManager = LockManager(this)
 
-        // 1. SECURE WINDOW IMMEDIATELY
-        if (prefs.isScreenShieldEnabled) {
-            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-        }
+        // 1. SHIELD PROTOCOL: Immediate Screen Protection
+        updateSecureFlag()
 
-        // 2. Initial Lock Logic
+        // 2. GATEKEEPER: Check Lock Status on Cold Start
         if (lockManager.isAppLocked()) {
             isLockedState.value = true
         }
 
-        // 3. Lifecycle Enforcer
+        // 3. AMNESIA PROTOCOL: Lifecycle Enforcer
         lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
                     lockManager.recordBackgroundEvent()
-                    if (prefs.isScreenShieldEnabled) {
-                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-                    }
+                    updateSecureFlag()
                 }
                 Lifecycle.Event.ON_START -> {
-                    if (prefs.isScreenShieldEnabled) {
-                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-                    } else {
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    }
+                    updateSecureFlag()
 
                     if (lockManager.isAppLocked()) {
                         isLockedState.value = true
-                        // AMNESIA PROTOCOL
+                        viewModel.clearSensitiveData()
+                    }
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    if (!isLockedState.value && lockManager.isAppLocked()) {
+                        isLockedState.value = true
                         viewModel.clearSensitiveData()
                     }
                 }
@@ -78,11 +75,14 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        // Onboarding Check
         val showOnboarding = mutableStateOf(!prefs.hasCompletedOnboarding())
 
+        // Process any incoming text sharing
         checkAndProcessIntent(intent, viewModel)
 
         setContent {
+            // Theme Injection
             val systemDark = isSystemInDarkTheme()
             val useDarkTheme = if (prefs.isDynamicColorsEnabled) systemDark else prefs.isDarkModeEnabled
 
@@ -94,10 +94,10 @@ class MainActivity : AppCompatActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
-                        // LAYER 1: APP
+                        // LAYER 1: MAIN APPLICATION
                         SigilApp(viewModel = viewModel)
 
-                        // LAYER 2: LOCK SCREEN
+                        // LAYER 2: LOCK SCREEN OVERLAY
                         if (isLockedState.value) {
                             LockScreen(
                                 viewModel = viewModel,
@@ -108,7 +108,7 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
 
-                        // LAYER 3: ONBOARDING WITH ANIMATION
+                        // LAYER 3: ONBOARDING
                         if (!isLockedState.value) {
                             AnimatedVisibility(
                                 visible = showOnboarding.value,
@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         checkAndProcessIntent(intent, viewModel)
     }
 
@@ -139,13 +140,21 @@ class MainActivity : AppCompatActivity() {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 intent.removeExtra(Intent.EXTRA_TEXT)
 
-                if (lockManager.isAppLocked()) {
+                if (lockManager.isAppLocked() || isLockedState.value) {
                     viewModel.cachePendingIntent(sharedText)
                     isLockedState.value = true
                 } else {
                     viewModel.handleIncomingSharedText(sharedText)
                 }
             }
+        }
+    }
+
+    private fun updateSecureFlag() {
+        if (prefs.isScreenShieldEnabled) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 }
