@@ -64,8 +64,8 @@ fun SecurePasswordInput(
             ),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             ),
