@@ -1,4 +1,4 @@
-> ## **Note:** This is a placeholder README. Content will be updated shortly.
+> ## **Note:** This is a placeholder README. Content will be updated shortly. Please refer to the [Latest Release](https://github.com/Animesh-Varma/Sigil/releases) for details till then.
 
 # SIGIL
 **A Zero-Trust Encryption Environment for Android**
@@ -11,20 +11,30 @@ It operates on a simple premise: **Trust nothing.** Not the operating system, no
 
 ## Downloads
 
-<a href="#">
-    <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
+<a href="https://apt.izzysoft.de/fdroid/index/apk/dev.animeshvarma.sigil">
+    <img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" alt="Get it on IzzyOnDroid" height="80">
 </a>
+
 <a href="https://play.google.com/store/apps/details?id=dev.animeshvarma.sigil">
     <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80">
 </a>
+<br>
+<a href="https://github.com/Animesh-Varma/Sigil/releases/latest">
+    <img src="https://img.shields.io/badge/GitHub-Download_APK-black?style=for-the-badge&logo=github" alt="Download from GitHub" height="80">
+</a>
+
 
 ### Release Status
 
 | Platform | Current Version | Build Channel |
 | :--- | :--- | :--- |
-| **F-Droid** | *Pending* | --- |
-| **Google Play** | **v0.4.0** | Beta |
-| **GitHub Releases** | **v0.4.0** | Beta |
+| **IzzyOnDroid** | *Pending* | --- |
+| **Google Play** | **v0.4.0** | Pre-release |
+| **GitHub Releases** | **v0.4.0** | Pre-release |
+
+## Screenshots 
+
+> *Screenshots coming soon*
 
 ---
 
@@ -91,7 +101,7 @@ The app includes a comprehensive suite of cryptographic primitives, ranging from
 ### Modern Standards (High Security)
 | Algorithm | Type | Description |
 | :--- | :--- | :--- |
-| **AES-GCM** | AEAD Block | NIST Standard. Hardware accelerated. |
+| **AES-GCM** | AEAD Block | NIST Standard. Hardware-accelerated. |
 | **ChaCha20-Poly1305** | AEAD Stream | IETF Standard. High performance, constant-time execution. |
 | **Serpent** | Block (CBC) | AES Finalist. 32 rounds. Highest theoretical security margin. |
 | **Twofish** | Block (CBC) | AES Finalist. Complex key schedule. |
@@ -114,7 +124,7 @@ The app includes a comprehensive suite of cryptographic primitives, ranging from
 
 Current development is focused on the following features to further harden the application:
 
-*   **Steganography:** Hiding encrypted ciphertext inside innocuous image files.
+*   **Steganography:** Hiding encrypted ciphertext inside innocuous image/txt/video/audio files.
 *   **File/Directory Encryption:** Extending the Quad-Layer engine to support arbitrary file types (PDF, JPG, ZIP).
 *   **Headerless Mode:** A raw output mode that strips all metadata headers for Plausible Deniability.
 *   **Asymmetric Encryption:** Elliptic Curve Cryptography (ECC) for secure key exchange between users.
@@ -178,6 +188,6 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ### Contact
 If you have questions, security findings, or want to contribute:
-Email: `animesh_varma@protonmail.com`
+Email: `sigil@animeshvarma.dev`
 
 **NOTE:** I am a student building this project in my spare time. Contributors and general security advice are always welcome.
