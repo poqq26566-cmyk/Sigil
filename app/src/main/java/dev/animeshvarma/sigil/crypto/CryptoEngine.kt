@@ -206,7 +206,7 @@ object CryptoEngine {
             val passBytes = toBytes(password)
             rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
             passBytes.fill(0.toByte())
-            logCallback("Root Secret reconstructed.")
+            logCallback("Root Secret reconstructed (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
             val macKey = deriveSubKey(rootSecret, salt, "SIGIL_GLOBAL_MAC", 32)
             val calculatedMac = calculateHMAC(payloadBytes, macKey)
@@ -232,6 +232,7 @@ object CryptoEngine {
             val headerKey = deriveSubKey(rootSecret, salt, "SIGIL_HEADER", 32)
             val metaBytes = decryptAesGcm(encryptedMeta, headerKey, headerIv, salt)
             headerKey.fill(0.toByte())
+            logCallback("Header decrypted.")
 
             val metaString = String(metaBytes, StandardCharsets.UTF_8)
             val parts = metaString.split("|")
@@ -239,7 +240,7 @@ object CryptoEngine {
             val ivStrings = parts[1].split(",")
             val isCompressed = parts.getOrNull(2) == "C"
 
-            logCallback("Layers detected: ${parts[0]}")
+            logCallback("Chain Sequence detected: ${parts[0]}")
 
             // 4. Decrypt Chain
             var currentBytes = bodyBytes
@@ -249,6 +250,10 @@ object CryptoEngine {
                 val iv = decoder.decode(ivStrings[i])
                 val keySize = getKeySize(algo)
 
+                if (getBlockSize(algo) == 8) {
+                    logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block - Weak).")
+                }
+                logCallback("Layer $layerId: Decrypting with ${algo.name}...")
                 val layerKey = deriveSubKey(rootSecret, salt, "SIGIL_LAYER_$layerId", keySize)
                 currentBytes = processCipher(false, algo, currentBytes, layerKey, iv)
                 layerKey.fill(0.toByte())
