@@ -106,6 +106,7 @@ data class ReleaseData(
     val version: String,
     val title: String,
     val tag: String,
+    val hasBreakingChanges: Boolean = false,
     val categories: List<ReleaseCategory>
 )
 
@@ -122,9 +123,10 @@ fun ReleasesContent() {
             version = "v0.4",
             title = "Onboarding & Access Control",
             tag = "Current Build",
+            hasBreakingChanges = true,
             categories = listOf(
                 ReleaseCategory(
-                    "⚠️ BREAKING CHANGES",
+                    "BREAKING CHANGES",
                     listOf(
                         "Incompatible Ciphertexts: Data encrypted with previous versions cannot be decrypted. The Key Derivation Function (KDF) logic has changed to support dynamic tuning.",
                         "Vault Wipe: The internal Keystore format has been hardened. Old saved keys are incompatible and have been cleared.",
@@ -132,7 +134,7 @@ fun ReleasesContent() {
                     )
                 ),
                 ReleaseCategory(
-                    "Core Cryptography (Engine v0.10.2)",
+                    "Core Cryptography (Engine v0.10.0)",
                     listOf(
                         "Quad-Layer Chain: 'Auto Mode' now utilizes a hybrid cascade of AES-256 + ChaCha20 + Twofish + Serpent.",
                         "ChaCha20-Poly1305: Added support for the high-performance ARX stream cipher (IETF standard).",
@@ -141,7 +143,7 @@ fun ReleasesContent() {
                     )
                 ),
                 ReleaseCategory(
-                    "Zero-Trust Architecture",
+                    "Architecture",
                     listOf(
                         "Zero-Knowledge Auth: App PINs are now stored as Salted Argon2 Hashes. It is mathematically impossible for the app to retrieve/reveal your PIN.",
                         "Anti-Tamper Biometrics: Fingerprint unlock now binds to a TEE CryptoObject. Root/Frida hooks cannot bypass authentication.",
@@ -184,6 +186,7 @@ fun ReleasesContent() {
             version = "v0.3",
             title = "Keystore Implementation",
             tag = "Dec 9, 2025",
+            hasBreakingChanges = false,
             categories = listOf(
                 ReleaseCategory(
                     "Security & Storage (Engine v0.9.0)",
@@ -213,11 +216,12 @@ fun ReleasesContent() {
                 )
             )
         ),
-        // --- v0.2 (PREVIOUS) ---
+        // --- v0.2 (Custom Implementation) ---
         ReleaseData(
             version = "v0.2",
             title = "Custom Implementation",
             tag = "Nov 30, 2025",
+            hasBreakingChanges = false,
             categories = listOf(
                 ReleaseCategory(
                     "User Interface",
@@ -245,6 +249,7 @@ fun ReleasesContent() {
             version = "v0.1",
             title = "The Foundation",
             tag = "Nov 26, 2025",
+            hasBreakingChanges = false,
             categories = listOf(
                 ReleaseCategory(
                     "Core Cryptography (Engine v0.7.0)",
@@ -270,7 +275,7 @@ fun ReleasesContent() {
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        itemsIndexed(releases) { index, release ->
+        itemsIndexed(releases) { _, release ->
             ReleaseCard(release, defaultExpanded = false)
         }
     }
@@ -317,7 +322,7 @@ fun ReleaseCard(release: ReleaseData, defaultExpanded: Boolean) {
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
@@ -326,6 +331,28 @@ fun ReleaseCard(release: ReleaseData, defaultExpanded: Boolean) {
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
                         )
+
+                        if (release.hasBreakingChanges) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.error,
+                                shape = RoundedCornerShape(4.dp),
+                                modifier = Modifier.height(20.dp),
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "BREAKING CHANGES",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onError,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
 
                         Icon(
                             imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -362,29 +389,69 @@ fun ReleaseCard(release: ReleaseData, defaultExpanded: Boolean) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 release.categories.forEach { category ->
-                    Text(
-                        text = category.title,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (category.title.contains("BREAKING")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+                    val isBreakingSection = category.title.contains("BREAKING", ignoreCase = true)
 
-                    category.points.forEach { point ->
-                        Row(modifier = Modifier.padding(bottom = 4.dp)) {
-                            Text(
-                                text = "• ",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = point,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    if (isBreakingSection) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = category.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+
+                                category.points.forEach { point ->
+                                    Row(
+                                        modifier = Modifier.padding(bottom = 4.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "• ",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = point,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    } else {
+                        Text(
+                            text = category.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+
+                        category.points.forEach { point ->
+                            Row(modifier = Modifier.padding(bottom = 4.dp)) {
+                                Text(
+                                    text = "• ",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = point,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }

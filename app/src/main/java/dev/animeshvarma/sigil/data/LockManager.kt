@@ -5,6 +5,7 @@ import android.util.Base64
 import androidx.core.content.edit
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.util.BiometricHelper
 import dev.animeshvarma.sigil.util.SecureMemory
 import dev.animeshvarma.sigil.util.SigilPreferences
 import java.security.MessageDigest
@@ -25,6 +26,12 @@ class LockManager(context: Context) {
     // --- STATE CHECKS ---
     fun isAppLocked(): Boolean {
         if (prefs.lockMode == LockMode.NONE) return false
+
+        if (BiometricHelper.hasBiometricChanged()) {
+            prefs.lockMode = LockMode.CUSTOM
+            resetGracePeriod()
+            return true
+        }
 
         val lastTime = prefs.lastBackgroundTimestamp
         if (lastTime == 0L) return true
@@ -70,13 +77,13 @@ class LockManager(context: Context) {
             prefs.lockMode = LockMode.CUSTOM
 
         } finally {
-            // 5. Cleanup
+            // 5. Cleanup memory
             SecureMemory.wipe(pinChars)
         }
     }
 
     fun verifyPin(inputPin: String): Boolean {
-        // 1. Load Salt
+        // 1. Load Salt & Hash
         val saltString = authPrefs.getString(KEY_PIN_SALT, null) ?: return false
         val storedHashString = authPrefs.getString(KEY_PIN_HASH, null) ?: return false
 
@@ -90,7 +97,13 @@ class LockManager(context: Context) {
             val inputHash = CryptoEngine.hashPin(inputChars, salt)
 
             // 3. Constant-Time Comparison
-            MessageDigest.isEqual(storedHash, inputHash)
+            val isMatch = MessageDigest.isEqual(storedHash, inputHash)
+
+            if (isMatch) {
+                BiometricHelper.resetBiometrics()
+            }
+
+            isMatch
 
         } catch (_: Exception) {
             false

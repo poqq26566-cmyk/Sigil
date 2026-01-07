@@ -16,6 +16,27 @@ import javax.crypto.SecretKey
 object BiometricHelper {
 
     private const val BIO_KEY_ALIAS = "SIGIL_BIO_AUTH_KEY"
+    private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+
+    // --- CHECKS ---
+    fun hasBiometricChanged(): Boolean {
+        return try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+
+            if (!keyStore.containsAlias(BIO_KEY_ALIAS)) return false
+
+            val key = keyStore.getKey(BIO_KEY_ALIAS, null) as? SecretKey ?: return false
+            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+
+            false
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     fun isDeviceSecure(context: Context): Boolean {
         val manager = BiometricManager.from(context)
@@ -29,12 +50,13 @@ object BiometricHelper {
         return manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
     }
 
+    // --- CRYPTO LOGIC ---
     private fun getBiometricCipher(): Cipher? {
         return try {
-            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
             if (!keyStore.containsAlias(BIO_KEY_ALIAS)) {
-                val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+                val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
                 val builder = KeyGenParameterSpec.Builder(
                     BIO_KEY_ALIAS,
                     KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
@@ -52,17 +74,22 @@ object BiometricHelper {
             val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
             cipher.init(Cipher.ENCRYPT_MODE, key)
             cipher
+
         } catch (_: KeyPermanentlyInvalidatedException) {
-            try {
-                val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-                keyStore.deleteEntry(BIO_KEY_ALIAS)
-            } catch (_: Exception) {}
             null
         } catch (_: Exception) {
             null
         }
     }
 
+    fun resetBiometrics() {
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            keyStore.deleteEntry(BIO_KEY_ALIAS)
+        } catch (_: Exception) { }
+    }
+
+    // --- UI ---
     fun showPrompt(
         activity: FragmentActivity,
         onSuccess: (BiometricPrompt.CryptoObject?) -> Unit,
@@ -88,10 +115,7 @@ object BiometricHelper {
                 when (errorCode) {
                     BiometricPrompt.ERROR_USER_CANCELED,
                     BiometricPrompt.ERROR_NEGATIVE_BUTTON -> onFailure()
-
-                    BiometricPrompt.ERROR_LOCKOUT,
-                    BiometricPrompt.ERROR_LOCKOUT_PERMANENT -> onError("Biometrics disabled: Too many failures.")
-
+                    BiometricPrompt.ERROR_LOCKOUT -> onError("Too many attempts. Use PIN.")
                     else -> onError(errString.toString())
                 }
             }
@@ -103,7 +127,11 @@ object BiometricHelper {
                 val cryptoObject = BiometricPrompt.CryptoObject(cipher)
                 BiometricPrompt(activity, executor, callback).authenticate(promptInfo, cryptoObject)
             } else {
-                BiometricPrompt(activity, executor, callback).authenticate(promptInfo)
+                if (hasBiometricChanged()) {
+                    onFailure()
+                } else {
+                    onError("Biometric Key Initialization Failed")
+                }
             }
         } catch (_: Exception) {
             onError("Biometric System Unavailable")

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,10 +47,11 @@ fun LockScreen(
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
-    // STATE: Controls whether we show the PIN input even in Biometric Mode
     var isPinFallback by remember { mutableStateOf(false) }
 
     var showWipeDialog by remember { mutableStateOf(false) }
+
+    var showBiometricInvalidatedDialog by remember { mutableStateOf(false) }
 
     fun triggerBiometric() {
         if (context is FragmentActivity) {
@@ -70,7 +72,11 @@ fun LockScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (lockMode == LockMode.DEVICE) {
+        if (BiometricHelper.hasBiometricChanged()) {
+            showBiometricInvalidatedDialog = true
+            isPinFallback = true
+        }
+        else if (lockMode == LockMode.DEVICE) {
             triggerBiometric()
         }
     }
@@ -113,7 +119,7 @@ fun LockScreen(
 
             Spacer(Modifier.height(48.dp))
 
-            if (lockMode == LockMode.CUSTOM || isPinFallback) {
+            if (lockMode == LockMode.CUSTOM || isPinFallback || showBiometricInvalidatedDialog) {
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = {
@@ -189,7 +195,7 @@ fun LockScreen(
                     }
                 }
 
-                if (lockMode == LockMode.DEVICE && isPinFallback) {
+                if (lockMode == LockMode.DEVICE && isPinFallback && !BiometricHelper.hasBiometricChanged()) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(onClick = { triggerBiometric() }) {
                         Icon(Icons.Default.Fingerprint, null, Modifier.size(16.dp))
@@ -217,6 +223,29 @@ fun LockScreen(
                 Text("Forgot PIN? Reset App", color = MaterialTheme.colorScheme.error)
             }
         }
+    }
+
+    // --- DIALOGS ---
+    if (showBiometricInvalidatedDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBiometricInvalidatedDialog = false
+            },
+            icon = {
+                Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.primary)
+            },
+            title = {
+                Text("Security Alert")
+            },
+            text = {
+                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to PIN authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showBiometricInvalidatedDialog = false }
+                ) { Text("I Understand") }
+            }
+        )
     }
 
     if (showWipeDialog) {
