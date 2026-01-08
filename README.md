@@ -25,7 +25,7 @@ With a Quad-Layer encryption chain that exceeds standard government protocols, S
         <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="85">
     </a>
       <a href="https://github.com/Animesh-Varma/Sigil/releases/latest">
-    <img alt="Get it on GitHub" src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" height="80">
+    <img alt="Get it on GitHub" src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" height="85">
   </a>
 </div>
 
