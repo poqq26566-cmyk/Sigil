@@ -12,6 +12,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=alert_status)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=security_rating)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
+[![CodeFactor](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil/badge)](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil)
 
 Sigil is an encryption app built to the highest standards. In a world of privacy leaks where you can trust no one, Sigil provides a Zero-Trust, offline-first fortress for your secrets.
 
