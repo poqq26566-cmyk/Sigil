@@ -15,7 +15,12 @@ import javax.crypto.SecretKey
 
 object BiometricHelper {
 
-    private const val BIO_KEY_ALIAS = "SIGIL_BIO_AUTH_KEY"
+    // UPDATE: New Alias for GCM Mode (v0.5.0+)
+    private const val NEW_BIO_KEY_ALIAS = "SIGIL_BIO_KEY_GCM"
+    // LEGACY: Old Alias for CBC Mode (v0.4.0) - Kept for cleanup
+    // TODO: Remove after v1.0.0 release.
+    private const val LEGACY_BIO_KEY_ALIAS = "SIGIL_BIO_AUTH_KEY"
+
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
     // --- CHECKS ---
@@ -23,11 +28,9 @@ object BiometricHelper {
         return try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-            if (!keyStore.containsAlias(BIO_KEY_ALIAS)) return false
-
-            val key = keyStore.getKey(BIO_KEY_ALIAS, null) as? SecretKey ?: return false
-            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
-
+            if (!keyStore.containsAlias(NEW_BIO_KEY_ALIAS)) return false
+            val key = keyStore.getKey(NEW_BIO_KEY_ALIAS, null) as? SecretKey ?: return false
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key)
 
             false
@@ -55,14 +58,18 @@ object BiometricHelper {
         return try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
-            if (!keyStore.containsAlias(BIO_KEY_ALIAS)) {
+            if (keyStore.containsAlias(LEGACY_BIO_KEY_ALIAS)) {
+                keyStore.deleteEntry(LEGACY_BIO_KEY_ALIAS)
+            }
+
+            if (!keyStore.containsAlias(NEW_BIO_KEY_ALIAS)) {
                 val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
                 val builder = KeyGenParameterSpec.Builder(
-                    BIO_KEY_ALIAS,
+                    NEW_BIO_KEY_ALIAS,
                     KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
                 )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM) 
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                     .setUserAuthenticationRequired(true)
                     .setInvalidatedByBiometricEnrollment(true)
 
@@ -70,8 +77,8 @@ object BiometricHelper {
                 keyGenerator.generateKey()
             }
 
-            val key = keyStore.getKey(BIO_KEY_ALIAS, null) as SecretKey
-            val cipher = Cipher.getInstance("AES/CBC/PKCS7Padding")
+            val key = keyStore.getKey(NEW_BIO_KEY_ALIAS, null) as SecretKey
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key)
             cipher
 
@@ -85,7 +92,8 @@ object BiometricHelper {
     fun resetBiometrics() {
         try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            keyStore.deleteEntry(BIO_KEY_ALIAS)
+            if (keyStore.containsAlias(NEW_BIO_KEY_ALIAS)) keyStore.deleteEntry(NEW_BIO_KEY_ALIAS)
+            if (keyStore.containsAlias(LEGACY_BIO_KEY_ALIAS)) keyStore.deleteEntry(LEGACY_BIO_KEY_ALIAS)
         } catch (_: Exception) { }
     }
 
