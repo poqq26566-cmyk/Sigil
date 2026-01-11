@@ -2,17 +2,14 @@
 # SIGIL
 **Open-source, offline zero-trust encryption utility with multi-layer chaining**
 
-[![Version](https://img.shields.io/badge/Version-v0.4.0-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
-[![License](https://img.shields.io/github/license/Animesh-Varma/Sigil?style=flat-square&color=green)](https://github.com/Animesh-Varma/Sigil/blob/master/LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/android-build.yml?branch=master&style=flat-square&logo=github-actions&label=build)](https://github.com/Animesh-Varma/Sigil/actions/workflows/android-build.yml)
-[![CodeQL](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/codeql.yml?branch=master&style=flat-square&logo=github&label=CodeQL)](https://github.com/Animesh-Varma/Sigil/actions/workflows/codeql.yml)
-[![Issues](https://img.shields.io/github/issues/Animesh-Varma/Sigil?style=flat-square&color=red)](https://github.com/Animesh-Varma/Sigil/issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/Animesh-Varma/Sigil?style=flat-square&color=purple)](https://github.com/Animesh-Varma/Sigil/pulls)
-
+[![Version](https://img.shields.io/badge/Version-v0.4.0-blue?style=flat&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
+[![License](https://img.shields.io/github/license/Animesh-Varma/Sigil?style=flat&color=green)](https://github.com/Animesh-Varma/Sigil/blob/master/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/android-build.yml?branch=master&style=flat&logo=github-actions&label=build)](https://github.com/Animesh-Varma/Sigil/actions/workflows/android-build.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/codeql.yml?branch=master&style=flat&logo=github&label=CodeQL)](https://github.com/Animesh-Varma/Sigil/actions/workflows/codeql.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=alert_status)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=security_rating)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=Animesh-Varma_Sigil&metric=vulnerabilities)](https://sonarcloud.io/dashboard?id=Animesh-Varma_Sigil)
-[![CodeFactor](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil/badge)](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil)
+[![CodeFactor](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil/badge?style=flat)](https://www.codefactor.io/repository/github/Animesh-Varma/Sigil)
 
 Sigil is an encryption app built to the highest standards. In a world of privacy leaks where you can trust no one, Sigil provides a Zero-Trust, offline-first fortress for your secrets.
 
