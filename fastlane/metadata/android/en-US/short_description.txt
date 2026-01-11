@@ -1,0 +1,1 @@
+Open-source, offline zero-trust encryption utility with multi-layer chaining.

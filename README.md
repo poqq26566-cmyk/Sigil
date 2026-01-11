@@ -113,12 +113,12 @@ In Home (Custom) tab mode, you can mix-and-match all the Algorithms available in
 
 <div align="center">
 
-| | | |
-|:---:|:---:|:---:|
-| <img src="Screenshots/Onboarding.JPEG" width="200"><br><b>Onboarding</b> | <img src="Screenshots/Applock.JPEG" width="200"><br><b>App Lock</b> | <img src="Screenshots/Sidebar.JPEG" width="200"><br><b>Navigation</b> |
-| <img src="Screenshots/Auto.JPEG" width="200"><br><b>Auto Mode</b> | <img src="Screenshots/Custom.JPEG" width="200"><br><b>Custom Mode</b> | <img src="Screenshots/Layers.JPEG" width="200"><br><b>Algorithms</b> |
-| <img src="Screenshots/Demo.JPEG" width="200"><br><b>Usage</b> | <img src="Screenshots/Logs.JPEG" width="200"><br><b>Logs</b> | <img src="Screenshots/Settings.JPEG" width="200"><br><b>Settings</b> |
-| <img src="Screenshots/Keystore(Tab).JPEG" width="200"><br><b>Keystore</b> | <img src="Screenshots/Keystore(Popup).JPEG" width="200"><br>Secure Vaulting<b></b> | <img src="Screenshots/Release.JPEG" width="200"><br><b>Releases</b> |
+|                                                                                                                 |                                                                                                                   |                                                                                                             |
+|:---------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------:|
+|   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" alt="Onboarding" width="200"><br><b>Onboarding</b>   |     <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.jpg" alt="App Lock" width="200"><br><b>App Lock</b>     | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" alt="Navigation" width="200"><br><b>Navigation</b> |
+|   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.jpg" alt="Auto Mode" width="200"><br><b>Auto Mode</b>    |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.jpg" alt="Custom Mode" width="200"><br><b>Custom Mode</b>    | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6.jpg" alt="Algorithms" width="200"><br><b>Algorithms</b> |
+|     <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.jpg" alt="Usage" width="200"><br><b>Usage</b>      |       <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8.jpg" alt="Logs" width="200"><br><b>Logs</b>       |  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/9.jpg" alt="Settings" width="200"><br><b>Settings</b>  |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10.jpg" alt="Keystore" width="200"><br><b>Keystore</b> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11.jpg" alt="Secure Vaulting" width="200"><br>Secure Vaulting<b></b> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/12.jpg" alt="Releases" width="200"><br><b>Releases</b>  |
 
 </div>
 
