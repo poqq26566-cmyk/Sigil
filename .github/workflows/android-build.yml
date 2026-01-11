@@ -1,18 +1,28 @@
 name: Android Build Check
 
+permissions:
+  contents: read
+
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
     paths-ignore:
       - 'README.md'
       - '.gitignore'
       - 'Screenshots/**'
+      - 'fastlane/**'
+      - '**.md'
+      - '.github/workflows/**'
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
     paths-ignore:
       - 'README.md'
       - '.gitignore'
       - 'Screenshots/**'
+      - 'fastlane/**'
+      - '**.md'
+      - '.github/workflows/**'
+
 
 jobs:
   build:
