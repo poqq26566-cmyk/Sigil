@@ -3,30 +3,35 @@ Sigil is an open-source, advanced text encryption utility designed for zero-trus
 The application operates entirely offline, performing all cryptographic operations locally on your device with a modern Material 3 interface that balances high-level defense with professional usability.
 
 Core Security Features
-• Quad-Layer Chaining: In Auto Mode, Sigil randomizes a hybrid cascade of AES-256-GCM + ChaCha20-Poly1305 + Twofish-CBC + Serpent-CBC for every message. This defense-in-depth approach ensures that even if one algorithm is compromised, your data remains protected by multiple independent layers.
-• Hardware-Backed Vault: Master keys are generated and stored within the Android Trusted Execution Environment (TEE). Your saved encryption passwords never touch the disk in plaintext, and biometric authentication binds directly to a TEE CryptoObject to resist common bypass techniques.
-• Tamper-Proof Design: Sigil uses an Encrypt-then-MAC architecture with Global HMAC-SHA256 signatures applied to the final container. Any tampering or corruption is detected and rejected before decryption is attempted.
-• Amnesia Protocol: Sensitive data is instantly wiped from RAM when the app backgrounds (configurable). A grace period setting allows quick app switching without re-authentication for convenience.
-• Access Control: Protected by App Lock, supporting device biometrics or custom PIN. PINs are stored as Salted Argon2 Hashes in a Zero-Knowledge architecture, making it mathematically impossible to retrieve your PIN.
+
+- Quad-Layer Chaining: In Auto Mode, Sigil randomizes a hybrid cascade of AES-256-GCM + ChaCha20-Poly1305 + Twofish-CBC + Serpent-CBC for every message. This defense-in-depth approach ensures that even if one algorithm is compromised, your data remains protected by multiple independent layers.
+- Hardware-Backed Vault: Master keys are generated and stored within the Android Trusted Execution Environment (TEE). Your saved encryption passwords never touch the disk in plaintext, and biometric authentication binds directly to a TEE CryptoObject to resist common bypass techniques.
+- Tamper-Proof Design: Sigil uses an Encrypt-then-MAC architecture with Global HMAC-SHA256 signatures applied to the final container. Any tampering or corruption is detected and rejected before decryption is attempted.
+- Amnesia Protocol: Sensitive data is instantly wiped from RAM when the app backgrounds (configurable). A grace period setting allows quick app switching without re-authentication for convenience.
+- Access Control: Protected by App Lock, supporting device biometrics or custom PIN. PINs are stored as Salted Argon2 Hashes in a Zero-Knowledge architecture, making it mathematically impossible to retrieve your PIN.
 
 Privacy & System Hardening
-• Screen Shield: Blocks screenshots and hides content in "Recent Apps" using FLAG_SECURE, protecting against shoulder surfing and malicious screen recording apps.
-• Clipboard Security: Auto-wipe timer and Android 13+ sensitive content flags prevent clipboard managers from accessing your encrypted data.
-• Zero-Knowledge: Operates offline without internet access, tracks no analytics, and stores no data on external servers. ADB and Cloud backups are explicitly disabled.
+
+- Screen Shield: Blocks screenshots and hides content in "Recent Apps" using FLAG_SECURE, protecting against shoulder surfing and malicious screen recording apps.
+- Clipboard Security: Auto-wipe timer and Android 13+ sensitive content flags prevent clipboard managers from accessing your encrypted data.
+- Zero-Knowledge: Operates offline without internet access, tracks no analytics, and stores no data on external servers. ADB and Cloud backups are explicitly disabled.
 
 Advanced User Toolkit
-• Secure Keystore: Save, name, view, rename, and delete encryption keys using the hardware-backed vault. Smart Vault Dropdowns enable one-tap access. Accepts text shared from external apps like WhatsApp and Signal.
-• System Console: Real-time logging of the encryption process, providing precise timing metrics and detailed error diagnostics.
-• Interactive Onboarding: Guided simulation demonstrating live encryption cycles and safe key management, with an Advanced Mode for power users.
-• Custom Encryption Control: Full manual control over encryption chains. Add, remove, and reorder layers from 15+ algorithms with interactive physics-based controls. Optional ZLIB compression available.
-• Advanced Theming: Material You Dynamic Colors, Dark/Light modes, and custom HSV color engine.
+
+- Secure Keystore: Save, name, view, rename, and delete encryption keys using the hardware-backed vault. Smart Vault Dropdowns enable one-tap access. Accepts text shared from external apps like WhatsApp and Signal.
+- System Console: Real-time logging of the encryption process, providing precise timing metrics and detailed error diagnostics.
+- Interactive Onboarding: Guided simulation demonstrating live encryption cycles and safe key management, with an Advanced Mode for power users.
+- Custom Encryption Control: Full manual control over encryption chains. Add, remove, and reorder layers from 15+ algorithms with interactive physics-based controls. Optional ZLIB compression available.
+- Advanced Theming: Material You Dynamic Colors, Dark/Light modes, and custom HSV color engine.
 
 Technical Specifications
-• Engine: CryptoEngine v0.10.0 (Bouncy Castle) with performance-tuned Argon2id configuration.
-• Key Derivation: Argon2id (Configurable) + SHA-512 pre-hashing + HKDF for layer separation to resist GPU attacks.
-• Supported Algorithms: AES (GCM/CBC), ChaCha20-Poly1305, Twofish, Serpent, Camellia, CAST6, RC6, SM4, GOST, SEED, Blowfish, IDEA, CAST5, TEA, and XTEA.
 
-Open Source Transparency
+- Engine: CryptoEngine v0.10.0 (Bouncy Castle) with performance-tuned Argon2id configuration.
+- Key Derivation: Argon2id (Configurable) + SHA-512 pre-hashing + HKDF for layer separation to resist GPU attacks.
+- Supported Algorithms: AES (GCM/CBC), ChaCha20-Poly1305, Twofish, Serpent, Camellia, CAST6, RC6, SM4, GOST, SEED, Blowfish, IDEA, CAST5, TEA, and XTEA.
+
+Open-Source Transparency
+
 The complete source code is available for public audit on GitHub: https://github.com/Animesh-Varma/Sigil
 For the complete release catalog and planned features, please visit:
 https://github.com/Animesh-Varma/Sigil/releases
