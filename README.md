@@ -37,10 +37,10 @@ With a Quad-Layer encryption chain that exceeds standard government protocols, S
 ### Release Status
 
 | Platform | Current Version | Build Channel |
-| :--- | :--- | :--- |
-| **IzzyOnDroid** | *Pending* | --- |
-| **Google Play** | **v0.4.0** | Pre-release |
-| **GitHub Releases** | **v0.4.0** | Pre-release |
+| :--- |:----------------| :--- |
+| **IzzyOnDroid** | *Pending*       | --- |
+| **Google Play** | **v0.4.1**      | Pre-release |
+| **GitHub Releases** | **v0.4.1**      | Pre-release |
 
 ---
 
@@ -116,12 +116,12 @@ In Home (Custom) tab mode, you can mix-and-match all the Algorithms available in
 
 <div align="center">
 
-|                                                                                                                 |                                                                                                                   |                                                                                                             |
-|:---------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------------------:|
-|   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.jpg" alt="Onboarding" width="200"><br><b>Onboarding</b>   |     <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.jpg" alt="App Lock" width="200"><br><b>App Lock</b>     | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.jpg" alt="Navigation" width="200"><br><b>Navigation</b> |
-|   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.jpg" alt="Auto Mode" width="200"><br><b>Auto Mode</b>    |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.jpg" alt="Custom Mode" width="200"><br><b>Custom Mode</b>    | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/6.jpg" alt="Algorithms" width="200"><br><b>Algorithms</b> |
-|     <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/7.jpg" alt="Usage" width="200"><br><b>Usage</b>      |       <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/8.jpg" alt="Logs" width="200"><br><b>Logs</b>       |  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/9.jpg" alt="Settings" width="200"><br><b>Settings</b>  |
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10.jpg" alt="Keystore" width="200"><br><b>Keystore</b> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11.jpg" alt="Secure Vaulting" width="200"><br>Secure Vaulting<b></b> | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/12.jpg" alt="Releases" width="200"><br><b>Releases</b>  |
+|                                                                                                                              |                                                                                                                                        |                                                                                                                              |
+|:----------------------------------------------------------------------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------:|
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01.jpg" alt="Onboarding" width="200"><br><b>Onboarding</b> |        <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02.jpg" alt="App Lock" width="200"><br><b>App Lock</b>        | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03.jpg" alt="Navigation" width="200"><br><b>Navigation</b> |
+|  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04.jpg" alt="Auto Mode" width="200"><br><b>Auto Mode</b>  |     <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05.jpg" alt="Custom Mode" width="200"><br><b>Custom Mode</b>     | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06.jpg" alt="Algorithms" width="200"><br><b>Algorithms</b> |
+|      <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07.jpg" alt="Usage" width="200"><br><b>Usage</b>      |            <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08.jpg" alt="Logs" width="200"><br><b>Logs</b>            |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/09.jpg" alt="Settings" width="200"><br><b>Settings</b>   |
+|   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10.jpg" alt="Keystore" width="200"><br><b>Keystore</b>   | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11.jpg" alt="Secure Vaulting" width="200"><br>Secure Vaulting<b></b> |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/12.jpg" alt="Releases" width="200"><br><b>Releases</b>   |
 
 </div>
 
@@ -174,8 +174,8 @@ Architecture is currently being laid for the v1.0.0 initial release:
 - **Language:** Kotlin
 - **UI:** Jetpack Compose (Material 3 Expressive APIs)
 - **Cryptography:** Bouncy Castle (bcprov-jdk18on v1.83)
-- **Persistence:** Hardware Keystore (TEE) + Encrypted SharedPreferences
-- **Architecture:** MVI (Model-View-Intent) + Clean Architecture
+- **Persistence:** Hardware Keystore (TEE) + Custom Encrypted Storage
+- **Architecture:** MVVM + UDF with Clean Architecture
 
 ---
 
