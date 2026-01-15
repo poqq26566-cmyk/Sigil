@@ -174,7 +174,7 @@ Architecture is currently being laid for the v1.0.0 initial release:
 - **Language:** Kotlin
 - **UI:** Jetpack Compose (Material 3 Expressive APIs)
 - **Cryptography:** Bouncy Castle (bcprov-jdk18on v1.83)
-- **Persistence:** Hardware Keystore (TEE) + Custom Encrypted Storage
+- **Persistence:** Hardware Keystore (TEE) + Encrypted SharedPreferences
 - **Architecture:** MVVM + UDF with Clean Architecture
 
 ---
