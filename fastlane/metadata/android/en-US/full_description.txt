@@ -30,7 +30,7 @@ Technical Specifications
 - Key Derivation: Argon2id (Configurable) + SHA-512 pre-hashing + HKDF for layer separation to resist GPU attacks.
 - Supported Algorithms: AES (GCM/CBC), ChaCha20-Poly1305, Twofish, Serpent, Camellia, CAST6, RC6, SM4, GOST, SEED, Blowfish, IDEA, CAST5, TEA, and XTEA.
 
-Open Source Transparency
+Open-Source Transparency
 
 The complete source code is available for public audit on GitHub: https://github.com/Animesh-Varma/Sigil
 For the complete release catalog and planned features, please visit:

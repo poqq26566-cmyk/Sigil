@@ -2,7 +2,7 @@
 # SIGIL
 **Open-source, offline zero-trust encryption utility with multi-layer chaining**
 
-[![Version](https://img.shields.io/badge/Version-v0.4.0-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
+[![Version](https://img.shields.io/badge/Version-v0.4.1-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
 [![License](https://img.shields.io/github/license/Animesh-Varma/Sigil?style=flat-square&color=green)](https://github.com/Animesh-Varma/Sigil/blob/master/LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/android-build.yml?branch=master&style=flat-square&logo=github-actions&label=build)](https://github.com/Animesh-Varma/Sigil/actions/workflows/android-build.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/Animesh-Varma/Sigil/codeql.yml?branch=master&style=flat-square&logo=github&label=CodeQL)](https://github.com/Animesh-Varma/Sigil/actions/workflows/codeql.yml)
