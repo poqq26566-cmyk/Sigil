@@ -432,7 +432,11 @@ object CryptoEngine {
         System.arraycopy(cNonce, 0, subIv, 4, 8)
 
         // 4. Delegate to standard ChaCha20Poly1305
-        return processChaCha20Poly1305(encrypt, data, subKey, subIv)
+        return try {
+            processChaCha20Poly1305(encrypt, data, subKey, subIv)
+        } finally {
+            subKey.fill(0.toByte())
+        }
     }
 
     private fun processAriaGcm(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
@@ -475,34 +479,39 @@ object CryptoEngine {
     private fun hChaCha20(key: ByteArray, nonce: ByteArray): ByteArray {
         val state = IntArray(16)
 
-        // Constants (expand 32-byte k)
-        state[0] = 0x61707865; state[1] = 0x3320646e; state[2] = 0x79622d32; state[3] = 0x6b206574
+        try {
+            // Constants (expand 32-byte k)
+            state[0] = 0x61707865; state[1] = 0x3320646e; state[2] = 0x79622d32; state[3] = 0x6b206574
 
-        // Key
-        val k = ByteBuffer.wrap(key).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
-        for (i in 0..7) state[4 + i] = k[i]
+            // Key
+            val k = ByteBuffer.wrap(key).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+            for (i in 0..7) state[4 + i] = k[i]
 
-        // Nonce
-        val n = ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
-        for (i in 0..3) state[12 + i] = n[i]
+            // Nonce
+            val n = ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+            for (i in 0..3) state[12 + i] = n[i]
 
-        // 20 Rounds
-        repeat(10) {
-            quarterRound(state, 0, 4, 8, 12)
-            quarterRound(state, 1, 5, 9, 13)
-            quarterRound(state, 2, 6, 10, 14)
-            quarterRound(state, 3, 7, 11, 15)
-            quarterRound(state, 0, 5, 10, 15)
-            quarterRound(state, 1, 6, 11, 12)
-            quarterRound(state, 2, 7, 8, 13)
-            quarterRound(state, 3, 4, 9, 14)
+            // 20 Rounds
+            repeat(10) {
+                quarterRound(state, 0, 4, 8, 12)
+                quarterRound(state, 1, 5, 9, 13)
+                quarterRound(state, 2, 6, 10, 14)
+                quarterRound(state, 3, 7, 11, 15)
+                quarterRound(state, 0, 5, 10, 15)
+                quarterRound(state, 1, 6, 11, 12)
+                quarterRound(state, 2, 7, 8, 13)
+                quarterRound(state, 3, 4, 9, 14)
+            }
+
+            // Output: State words 0-3 and 12-15
+            val out = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+            for (i in 0..3) out.putInt(state[i])
+            for (i in 12..15) out.putInt(state[i])
+            return out.array()
+
+        } finally {
+            state.fill(0)
         }
-
-        // Output: State words 0-3 and 12-15
-        val out = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
-        for (i in 0..3) out.putInt(state[i])
-        for (i in 12..15) out.putInt(state[i])
-        return out.array()
     }
 
     private fun quarterRound(x: IntArray, a: Int, b: Int, c: Int, d: Int) {
