@@ -13,10 +13,12 @@ import org.bouncycastle.crypto.params.AEADParameters
 import org.bouncycastle.crypto.engines.*
 import org.bouncycastle.crypto.modes.CBCBlockCipher
 import org.bouncycastle.crypto.modes.ChaCha20Poly1305
+import org.bouncycastle.crypto.modes.GCMBlockCipher
 import org.bouncycastle.crypto.paddings.PKCS7Padding
 import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.CharBuffer
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
@@ -44,22 +46,29 @@ object CryptoEngine {
     )
 
     enum class Algorithm {
-        AES_GCM, CHACHA20_POLY1305,
+        AES_GCM, CHACHA20_POLY1305, XCHACHA20_POLY1305, ARIA_256_GCM,
         AES_CBC, TWOFISH_CBC, SERPENT_CBC, CAMELLIA_CBC,
         CAST6_CBC, RC6_CBC, SM4_CBC, SEED_CBC,
         BLOWFISH_CBC, IDEA_CBC, CAST5_CBC, TEA_CBC, XTEA_CBC, GOST_CBC
     }
 
-    private fun getBlockSize(algo: Algorithm): Int {
+    private fun getIvSize(algo: Algorithm): Int {
         return when (algo) {
-            Algorithm.AES_GCM, Algorithm.CHACHA20_POLY1305 -> 12
+            Algorithm.AES_GCM, Algorithm.CHACHA20_POLY1305, Algorithm.ARIA_256_GCM -> 12
+            Algorithm.XCHACHA20_POLY1305 -> 24
 
-            // 64-bit Block Ciphers (Weak)
             Algorithm.BLOWFISH_CBC, Algorithm.IDEA_CBC, Algorithm.CAST5_CBC,
             Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.GOST_CBC -> 8
 
-            // Standard 128-bit Block Ciphers
             else -> 16
+        }
+    }
+
+    private fun is64BitBlockCipher(algo: Algorithm): Boolean {
+        return when (algo) {
+            Algorithm.BLOWFISH_CBC, Algorithm.IDEA_CBC, Algorithm.CAST5_CBC,
+            Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.GOST_CBC -> true
+            else -> false
         }
     }
 
@@ -67,7 +76,6 @@ object CryptoEngine {
         return when (algo) {
             Algorithm.SM4_CBC, Algorithm.SEED_CBC, Algorithm.CAST5_CBC,
             Algorithm.IDEA_CBC, Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.BLOWFISH_CBC -> 16
-
             else -> 32
         }
     }
@@ -80,7 +88,7 @@ object CryptoEngine {
         compress: Boolean = true,
         logCallback: (String) -> Unit = {}
     ): String {
-        if (data.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input exceeds 10MB safety limit.")
+        require(data.size <= MAX_DATA_LIMIT) { "Input exceeds 10MB safety limit." }
 
         val startTime = System.currentTimeMillis()
         logCallback("Initializing Secure Chain...")
@@ -113,11 +121,11 @@ object CryptoEngine {
 
         algorithms.forEachIndexed { index, algo ->
             val layerId = index + 1
-            if (getBlockSize(algo) == 8) {
+            if (is64BitBlockCipher(algo)) {
                 logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block - Weak).")
             }
 
-            val ivSize = getBlockSize(algo)
+            val ivSize = getIvSize(algo)
             val iv = ByteArray(ivSize).apply { secureRandom.nextBytes(this) }
             ivListBytes.add(iv)
 
@@ -144,7 +152,7 @@ object CryptoEngine {
 
         // 6. Pack
         val totalSize = 16 + 12 + 4 + encryptedMetadataBytes.size + currentBytes.size
-        if (totalSize > MAX_DATA_LIMIT) throw IllegalArgumentException("Pack size exceeds limit.")
+        require(totalSize <= MAX_DATA_LIMIT) { "Pack size exceeds limit." }
 
         val packBuffer = ByteBuffer.allocate(totalSize)
         packBuffer.put(salt)
@@ -163,7 +171,7 @@ object CryptoEngine {
         val finalBytes = ByteBuffer.allocate(packedBytes.size + hmac.size)
             .put(packedBytes).put(hmac).array()
 
-        if (finalBytes.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Output exceeds limit.")
+        require(finalBytes.size <= MAX_DATA_LIMIT) { "Output exceeds limit." }
 
         logCallback("Global HMAC Signature applied.")
         logCallback("Operation complete in ${System.currentTimeMillis() - startTime}ms.")
@@ -250,7 +258,7 @@ object CryptoEngine {
                 val iv = decoder.decode(ivStrings[i])
                 val keySize = getKeySize(algo)
 
-                if (getBlockSize(algo) == 8) {
+                if (is64BitBlockCipher(algo)) {
                     logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block - Weak).")
                 }
                 logCallback("Layer $layerId: Decrypting with ${algo.name}...")
@@ -315,7 +323,7 @@ object CryptoEngine {
     }
 
     private fun compressData(data: ByteArray): ByteArray {
-        if (data.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input too large.")
+        require(data.size <= MAX_DATA_LIMIT) { "Input too large." }
         val d = Deflater(Deflater.BEST_COMPRESSION)
         d.setInput(data)
         d.finish()
@@ -324,7 +332,7 @@ object CryptoEngine {
         while (!d.finished()) {
             val c = d.deflate(b)
             o.write(b, 0, c)
-            if (o.size() > MAX_DATA_LIMIT) throw IllegalArgumentException("Compression overflow.")
+            require(o.size() <= MAX_DATA_LIMIT) { "Compression overflow." }
         }
         d.end()
         return o.toByteArray()
@@ -340,7 +348,7 @@ object CryptoEngine {
             val count = inflater.inflate(buffer)
             if (count == 0 && !inflater.finished()) break
             totalBytes += count
-            if (totalBytes > MAX_DATA_LIMIT) throw IllegalArgumentException("Decompression Limit Exceeded.")
+            require(totalBytes <= MAX_DATA_LIMIT) { "Decompression Limit Exceeded." }
             outputStream.write(buffer, 0, count)
         }
         inflater.end()
@@ -379,6 +387,8 @@ object CryptoEngine {
         return when (algo) {
             Algorithm.AES_GCM -> if (encrypt) encryptAesGcm(data, key, iv, null) else decryptAesGcm(data, key, iv, null)
             Algorithm.CHACHA20_POLY1305 -> processChaCha20Poly1305(encrypt, data, key, iv)
+            Algorithm.XCHACHA20_POLY1305 -> processXChaCha20Poly1305(encrypt, data, key, iv)
+            Algorithm.ARIA_256_GCM -> processAriaGcm(encrypt, data, key, iv)
             Algorithm.AES_CBC -> processBlockCipher(encrypt, AESEngine.newInstance(), data, key, iv)
             Algorithm.TWOFISH_CBC -> processBlockCipher(encrypt, TwofishEngine(), data, key, iv)
             Algorithm.SERPENT_CBC -> processBlockCipher(encrypt, SerpentEngine(), data, key, iv)
@@ -399,7 +409,34 @@ object CryptoEngine {
     // --- LOW LEVEL CIPHER IMPLEMENTATIONS ---
     private fun processChaCha20Poly1305(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
         val cipher = ChaCha20Poly1305()
-        // ChaCha20-Poly1305 takes a 128-bit MAC size (16 bytes) and a 96-bit Nonce (12 bytes)
+        val params = AEADParameters(KeyParameter(key), 128, iv, null)
+        cipher.init(encrypt, params)
+        val out = ByteArray(cipher.getOutputSize(data.size))
+        val len = cipher.processBytes(data, 0, data.size, out, 0)
+        val finalLen = cipher.doFinal(out, len)
+        return out.copyOf(len + finalLen)
+    }
+
+    private fun processXChaCha20Poly1305(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
+        if (iv.size != 24) throw IllegalArgumentException("XChaCha20 requires 24-byte nonce")
+
+        // 1. Split IV into nonce (16 bytes) and block counter/remaining nonce (8 bytes)
+        val hNonce = iv.copyOfRange(0, 16)
+        val cNonce = iv.copyOfRange(16, 24)
+
+        // 2. HChaCha20 Derivation
+        val subKey = hChaCha20(key, hNonce)
+
+        // 3. Construct 12-byte IV for ChaCha20 (4 bytes 0 + 8 bytes cNonce)
+        val subIv = ByteArray(12)
+        System.arraycopy(cNonce, 0, subIv, 4, 8)
+
+        // 4. Delegate to standard ChaCha20Poly1305
+        return processChaCha20Poly1305(encrypt, data, subKey, subIv)
+    }
+
+    private fun processAriaGcm(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
+        val cipher = GCMBlockCipher.newInstance(ARIAEngine(), org.bouncycastle.crypto.modes.gcm.BasicGCMMultiplier())
         val params = AEADParameters(KeyParameter(key), 128, iv, null)
         cipher.init(encrypt, params)
         val out = ByteArray(cipher.getOutputSize(data.size))
@@ -433,5 +470,49 @@ object CryptoEngine {
         cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec)
         if (aad != null) cipher.updateAAD(aad)
         return cipher.doFinal(data)
+    }
+
+    private fun hChaCha20(key: ByteArray, nonce: ByteArray): ByteArray {
+        val state = IntArray(16)
+
+        // Constants (expand 32-byte k)
+        state[0] = 0x61707865; state[1] = 0x3320646e; state[2] = 0x79622d32; state[3] = 0x6b206574
+
+        // Key
+        val k = ByteBuffer.wrap(key).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+        for (i in 0..7) state[4 + i] = k.get(i)
+
+        // Nonce
+        val n = ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+        for (i in 0..3) state[12 + i] = n.get(i)
+
+        // 20 Rounds
+        repeat(10) {
+            quarterRound(state, 0, 4, 8, 12)
+            quarterRound(state, 1, 5, 9, 13)
+            quarterRound(state, 2, 6, 10, 14)
+            quarterRound(state, 3, 7, 11, 15)
+            quarterRound(state, 0, 5, 10, 15)
+            quarterRound(state, 1, 6, 11, 12)
+            quarterRound(state, 2, 7, 8, 13)
+            quarterRound(state, 3, 4, 9, 14)
+        }
+
+        // Output: State words 0-3 and 12-15
+        val out = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0..3) out.putInt(state[i])
+        for (i in 12..15) out.putInt(state[i])
+        return out.array()
+    }
+
+    private fun quarterRound(x: IntArray, a: Int, b: Int, c: Int, d: Int) {
+        x[a] += x[b]; x[d] = rotateLeft(x[d] xor x[a], 16)
+        x[c] += x[d]; x[b] = rotateLeft(x[b] xor x[c], 12)
+        x[a] += x[b]; x[d] = rotateLeft(x[d] xor x[a], 8)
+        x[c] += x[d]; x[b] = rotateLeft(x[b] xor x[c], 7)
+    }
+
+    private fun rotateLeft(i: Int, distance: Int): Int {
+        return (i shl distance) or (i ushr -distance)
     }
 }
