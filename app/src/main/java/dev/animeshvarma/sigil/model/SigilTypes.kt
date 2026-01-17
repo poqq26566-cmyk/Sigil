@@ -50,9 +50,23 @@ object AlgorithmRegistry {
             defaultMode = CipherMode.GCM
         ),
         SigilAlgorithm(
+            id = "ARIA_256_GCM",
+            name = "ARIA-256 (GCM)",
+            description = "South Korean standard (RFC 5794). 128-bit block, 256-bit key. A high-security, AEAD alternative independent of NIST/AES.",
+            type = CipherType.BLOCK,
+            defaultMode = CipherMode.GCM
+        ),
+        SigilAlgorithm(
             id = "CHACHA20_POLY1305",
             name = "ChaCha20-Poly1305",
-            description = "High-speed stream cipher by D. J. Bernstein. Immune to padding oracle attacks and timing attacks. Faster than AES on older CPUs.",
+            description = "High-speed stream cipher by D. J. Bernstein. Immune to padding oracle attacks and timing attacks.",
+            type = CipherType.STREAM,
+            defaultMode = CipherMode.POLY1305
+        ),
+        SigilAlgorithm(
+            id = "XCHACHA20_POLY1305",
+            name = "XChaCha20-Poly1305",
+            description = "Extended-nonce variant (192-bit). Eliminates random nonce collision risks.",
             type = CipherType.STREAM,
             defaultMode = CipherMode.POLY1305
         ),

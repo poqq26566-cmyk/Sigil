@@ -1,5 +1,4 @@
-
-# SIGIL
+# SIGIL [Dev]
 **Open-source, offline zero-trust encryption utility with multi-layer chaining**
 
 [![Version](https://img.shields.io/badge/Version-v0.4.1-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
@@ -36,11 +35,11 @@ With a Quad-Layer encryption chain that exceeds standard government protocols, S
 
 ### Release Status
 
-| Platform | Current Version | Build Channel |
-| :--- |:----------------| :--- |
-| **IzzyOnDroid** | *Pending*       | --- |
-| **Google Play** | **v0.4.1**      | Pre-release |
-| **GitHub Releases** | **v0.4.1**      | Pre-release |
+| Platform | Current Version  | Build Channel |
+| :--- |:-----------------| :--- |
+| **IzzyOnDroid** | **v0.4.1**       | Pre-release |
+| **Google Play** | **v0.4.1**       | Pre-release |
+| **GitHub Releases** | **v0.4.1**       | Pre-release |
 
 ---
 
@@ -131,12 +130,14 @@ In Home (Custom) tab mode, you can mix-and-match all the Algorithms available in
 
 ## Algorithm Registry
 
-Sigil integrates a comprehensive library of **16 cryptographic algorithms**, encompassing modern government standards, high-margin AES finalists, and legacy ciphers for analysis.
+Sigil currently integrates a comprehensive library of **18 cryptographic algorithms**, encompassing modern government standards, high-margin AES finalists, and legacy ciphers for analysis.
 
 | Algorithm | Type | Block Size | Origin/Standard | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **AES-GCM** | Block (AEAD) | 128-bit | NIST Standard (USA) | **Primary** |
 | **ChaCha20-Poly1305** | Stream (AEAD) | N/A | IETF Standard | **Primary** |
+| **XChaCha20-Poly1305** | Stream (AEAD) | N/A | Extended Nonce Variant | **SOTA** |
+| **ARIA-256-GCM** | Block (AEAD) | 128-bit | IETF RFC 5794 (South Korea) | **Very Strong** |
 | **Serpent** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
 | **Twofish** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
 | **Camellia** | Block (CBC) | 128-bit | NESSIE/CRYPTREC (EU/Japan) | **Strong** |
