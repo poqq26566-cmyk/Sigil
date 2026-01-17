@@ -477,6 +477,8 @@ object CryptoEngine {
     }
 
     private fun hChaCha20(key: ByteArray, nonce: ByteArray): ByteArray {
+        require(key.size == 32) { "HChaCha20 requires 32-byte key" }
+        require(nonce.size == 16) { "HChaCha20 requires 16-byte nonce" }
         val state = IntArray(16)
 
         try {
