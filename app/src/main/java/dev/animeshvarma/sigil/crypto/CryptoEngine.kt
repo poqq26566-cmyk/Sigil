@@ -418,7 +418,7 @@ object CryptoEngine {
     }
 
     private fun processXChaCha20Poly1305(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
-        if (iv.size != 24) throw IllegalArgumentException("XChaCha20 requires 24-byte nonce")
+        require(iv.size == 24) { "XChaCha20 requires 24-byte nonce" }
 
         // 1. Split IV into nonce (16 bytes) and block counter/remaining nonce (8 bytes)
         val hNonce = iv.copyOfRange(0, 16)
@@ -480,11 +480,11 @@ object CryptoEngine {
 
         // Key
         val k = ByteBuffer.wrap(key).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
-        for (i in 0..7) state[4 + i] = k.get(i)
+        for (i in 0..7) state[4 + i] = k[i]
 
         // Nonce
         val n = ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
-        for (i in 0..3) state[12 + i] = n.get(i)
+        for (i in 0..3) state[12 + i] = n[i]
 
         // 20 Rounds
         repeat(10) {
