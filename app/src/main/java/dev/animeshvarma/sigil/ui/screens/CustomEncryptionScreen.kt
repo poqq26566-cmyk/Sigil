@@ -1,6 +1,7 @@
 package dev.animeshvarma.sigil.ui.screens
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -16,8 +17,10 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
@@ -46,6 +49,8 @@ import androidx.compose.ui.zIndex
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.AlgorithmRegistry
+import dev.animeshvarma.sigil.model.EncryptionProfile
+import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.ui.components.SecurePasswordInput
 import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
@@ -60,6 +65,9 @@ import kotlinx.coroutines.launch
 fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     val context = LocalContext.current
     var showAddLayerSheet by remember { mutableStateOf(false) }
+    var showSaveProfileDialog by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf<EncryptionProfile?>(null) }
+
     val listState = rememberLazyListState()
     val vaultEntries by viewModel.vaultEntries.collectAsState()
 
@@ -105,14 +113,43 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Cipher Cascade", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SmallFloatingActionButton(
-                    onClick = { showAddLayerSheet = true },
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    elevation = FloatingActionButtonDefaults.elevation(0.dp),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(Icons.Default.Add, "Add Layer", modifier = Modifier.size(18.dp))
+
+                Row {
+                    // SAVE PROFILE BUTTON
+                    SmallFloatingActionButton(
+                        onClick = {
+                            if (uiState.editingProfileId != null) {
+                                val original = viewModel.getProfileById(uiState.editingProfileId)
+                                if (original != null) {
+                                    showOverwriteDialog = original
+                                } else {
+                                    showSaveProfileDialog = true
+                                }
+                            } else {
+                                showSaveProfileDialog = true
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        elevation = FloatingActionButtonDefaults.elevation(0.dp),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        val icon = if (uiState.editingProfileId != null) Icons.Default.Edit else Icons.Default.Save
+                        Icon(icon, "Save Profile", modifier = Modifier.size(16.dp))
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    // ADD LAYER BUTTON
+                    SmallFloatingActionButton(
+                        onClick = { showAddLayerSheet = true },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        elevation = FloatingActionButtonDefaults.elevation(0.dp),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Add, "Add Layer", modifier = Modifier.size(18.dp))
+                    }
                 }
             }
 
@@ -306,6 +343,156 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
             )
         }
     }
+
+    // --- DIALOGS ---
+    if (showSaveProfileDialog) {
+        SaveProfileDialog(
+            initialKdf = viewModel.getPrefs().let { CryptoEngine.KdfConfig(it.kdfIterations, it.kdfMemoryPow2, it.kdfParallelism) },
+            onDismiss = { showSaveProfileDialog = false },
+            onSave = { name, desc, kdfOverride ->
+                viewModel.saveProfile(
+                    name = name,
+                    description = desc,
+                    layers = uiState.customLayers.map { it.algorithm },
+                    kdfOverride = kdfOverride,
+                    compress = uiState.isCompressionEnabled,
+                    onSuccess = {
+                        showSaveProfileDialog = false
+                        viewModel.onModeSelected(SigilMode.AUTO)
+                    },
+                    onDuplicateName = { existing ->
+                        showSaveProfileDialog = false
+                        showOverwriteDialog = existing
+                    }
+                )
+            }
+        )
+    }
+
+    // UPDATE CONFIRMATION DIALOG
+    showOverwriteDialog?.let { existing ->
+        // Calculate Diff for UI
+        val newLayers = uiState.customLayers.map { it.algorithm.name }
+        val oldLayers = existing.layers.map { it.name }
+        val layerDiff = if (newLayers != oldLayers) "Layers changed." else "Layers unchanged."
+        val compressDiff = if (uiState.isCompressionEnabled != existing.isCompressionEnabled) "Compression setting changed." else ""
+
+        AlertDialog(
+            onDismissRequest = { showOverwriteDialog = null },
+            icon = { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Update Profile?") },
+            text = {
+                Column {
+                    Text("Update '${existing.name}' with current configuration?")
+                    Spacer(Modifier.height(8.dp))
+                    Text("Changes:", fontWeight = FontWeight.Bold)
+                    Text("• $layerDiff")
+                    if (compressDiff.isNotEmpty()) Text("• $compressDiff")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Create updated profile reusing ID and Name, but taking new Layers/Compression
+                        val updated = existing.copy(
+                            layers = uiState.customLayers.map { it.algorithm },
+                            isCompressionEnabled = uiState.isCompressionEnabled
+                            // Note: KDF and Description preserved from original as we don't have UI to edit them in "Quick Update"
+                        )
+                        viewModel.overwriteProfile(updated)
+                        showOverwriteDialog = null
+                        viewModel.onModeSelected(SigilMode.AUTO)
+                    }
+                ) { Text("Update") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOverwriteDialog = null }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+fun SaveProfileDialog(
+    initialKdf: CryptoEngine.KdfConfig,
+    onDismiss: () -> Unit,
+    onSave: (String, String, CryptoEngine.KdfConfig?) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
+    // KDF Override State
+    var useCustomKdf by remember { mutableStateOf(false) }
+    var kdfIter by remember { mutableFloatStateOf(initialKdf.iterations.toFloat()) }
+    var kdfMem by remember { mutableFloatStateOf(initialKdf.memoryPow2.toFloat()) }
+    var kdfPar by remember { mutableFloatStateOf(initialKdf.parallelism.toFloat()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save Profile") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 20) name = it },
+                    label = { Text("Profile Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { if (it.length <= 50) description = it },
+                    label = { Text("Short Description") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(16.dp))
+
+                // Custom KDF Toggle
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { useCustomKdf = !useCustomKdf }
+                ) {
+                    Checkbox(checked = useCustomKdf, onCheckedChange = { useCustomKdf = it })
+                    Text("Override Key Derivation (KDF)", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                AnimatedVisibility(visible = useCustomKdf) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        Text("Iterations: ${kdfIter.toInt()}", style = MaterialTheme.typography.labelSmall)
+                        Slider(value = kdfIter, onValueChange = { kdfIter = it }, valueRange = 1f..32f)
+
+                        Text("Memory: ${(1 shl kdfMem.toInt())/1024} MB", style = MaterialTheme.typography.labelSmall)
+                        Slider(value = kdfMem, onValueChange = { kdfMem = it }, valueRange = 12f..18f)
+
+                        Text("Parallelism: ${kdfPar.toInt()}", style = MaterialTheme.typography.labelSmall)
+                        Slider(value = kdfPar, onValueChange = { kdfPar = it }, valueRange = 1f..8f)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val kdfConfig = if (useCustomKdf) {
+                        CryptoEngine.KdfConfig(kdfIter.toInt(), kdfMem.toInt(), kdfPar.toInt())
+                    } else null
+                    onSave(name, description, kdfConfig)
+                },
+                enabled = name.isNotBlank()
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 // Movable Layer Row

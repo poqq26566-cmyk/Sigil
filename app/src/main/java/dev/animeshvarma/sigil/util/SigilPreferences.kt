@@ -3,7 +3,11 @@ package dev.animeshvarma.sigil.util
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import dev.animeshvarma.sigil.crypto.CryptoEngine
+import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LockMode
+import org.json.JSONArray
+import org.json.JSONObject
 
 class SigilPreferences(context: Context) {
 
@@ -23,6 +27,7 @@ class SigilPreferences(context: Context) {
         private const val KEY_DYNAMIC_COLORS = "dynamic_colors_enabled"
         private const val KEY_DARK_MODE = "dark_mode_enabled"
         private const val KEY_THEME_COLOR = "theme_color_int"
+        private const val KEY_SAVED_PROFILES = "saved_encryption_profiles"
     }
 
     fun hasCompletedOnboarding(): Boolean {
@@ -91,4 +96,84 @@ class SigilPreferences(context: Context) {
     var kdfParallelism: Int
         get() = prefs.getInt(KEY_KDF_PARALLELISM, 4)
         set(value) = prefs.edit { putInt(KEY_KDF_PARALLELISM, value) }
+
+    // --- PROFILE PERSISTENCE ---
+    fun getCustomProfiles(): List<EncryptionProfile> {
+        val jsonString = prefs.getString(KEY_SAVED_PROFILES, "[]") ?: "[]"
+        val profiles = mutableListOf<EncryptionProfile>()
+
+        try {
+            val jsonArray = JSONArray(jsonString)
+            for (i in 0 until jsonArray.length()) {
+                val obj = jsonArray.getJSONObject(i)
+                try {
+                    val id = obj.getString("id")
+                    val name = obj.getString("name")
+                    val desc = obj.optString("description", "Custom Profile")
+                    val compress = obj.optBoolean("compress", true)
+
+                    // Parse Layers
+                    val layersArray = obj.getJSONArray("layers")
+                    val layers = mutableListOf<CryptoEngine.Algorithm>()
+                    for (j in 0 until layersArray.length()) {
+                        layers.add(CryptoEngine.Algorithm.valueOf(layersArray.getString(j)))
+                    }
+
+                    // Parse Optional KDF
+                    var kdfConfig: CryptoEngine.KdfConfig? = null
+                    if (obj.has("kdf")) {
+                        val kdfObj = obj.getJSONObject("kdf")
+                        kdfConfig = CryptoEngine.KdfConfig(
+                            iterations = kdfObj.getInt("iter"),
+                            memoryPow2 = kdfObj.getInt("mem"),
+                            parallelism = kdfObj.getInt("par")
+                        )
+                    }
+
+                    profiles.add(EncryptionProfile(
+                        id = id,
+                        name = name,
+                        description = desc,
+                        layers = layers,
+                        kdfConfig = kdfConfig,
+                        isBuiltIn = false,
+                        isCompressionEnabled = compress
+                    ))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return profiles
+    }
+
+    fun saveCustomProfiles(profiles: List<EncryptionProfile>) {
+        val jsonArray = JSONArray()
+        profiles.filter { !it.isBuiltIn }.forEach { profile ->
+            val obj = JSONObject()
+            obj.put("id", profile.id)
+            obj.put("name", profile.name)
+            obj.put("description", profile.description)
+            obj.put("compress", profile.isCompressionEnabled)
+
+            val layersArray = JSONArray()
+            profile.layers.forEach { algo ->
+                layersArray.put(algo.name)
+            }
+            obj.put("layers", layersArray)
+
+            profile.kdfConfig?.let { kdf ->
+                val kdfObj = JSONObject()
+                kdfObj.put("iter", kdf.iterations)
+                kdfObj.put("mem", kdf.memoryPow2)
+                kdfObj.put("par", kdf.parallelism)
+                obj.put("kdf", kdfObj)
+            }
+
+            jsonArray.put(obj)
+        }
+        prefs.edit { putString(KEY_SAVED_PROFILES, jsonArray.toString()) }
+    }
 }

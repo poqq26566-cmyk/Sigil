@@ -1,11 +1,11 @@
 package dev.animeshvarma.sigil
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.ClipDescription
 import android.os.Build
 import android.os.PersistableBundle
 import android.widget.Toast
@@ -19,8 +19,10 @@ import dev.animeshvarma.sigil.data.KeystoreRepository
 import dev.animeshvarma.sigil.data.LockManager
 import dev.animeshvarma.sigil.data.VaultEntry
 import dev.animeshvarma.sigil.model.AppScreen
+import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LayerEntry
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.ProfileRegistry
 import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.util.SecureMemory
@@ -36,6 +38,7 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlin.system.exitProcess
 
 class SigilViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,11 +60,127 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch(Dispatchers.IO) {
             refreshVault()
+            loadProfiles()
         }
     }
 
+    // --- PROFILE MANAGEMENT ---
+
+    private fun loadProfiles() {
+        val customProfiles = prefs.getCustomProfiles()
+        val allProfiles = ProfileRegistry.builtInProfiles + customProfiles
+        _uiState.update {
+            it.copy(availableProfiles = allProfiles)
+        }
+    }
+
+    fun selectProfile(profile: EncryptionProfile) {
+        _uiState.update { it.copy(activeProfile = profile) }
+        addLog("Profile Switched: ${profile.name}")
+    }
+
+    fun saveProfile(
+        name: String,
+        description: String,
+        layers: List<CryptoEngine.Algorithm>,
+        kdfOverride: CryptoEngine.KdfConfig?,
+        compress: Boolean,
+        onSuccess: () -> Unit,
+        onDuplicateName: (EncryptionProfile) -> Unit
+    ) {
+        if (name.isBlank()) {
+            addLog("Error: Profile name required.")
+            return
+        }
+        if (layers.isEmpty()) {
+            addLog("Error: Cannot save empty chain.")
+            return
+        }
+
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+
+        // Check for Name Duplication
+        val duplicate = currentCustom.find { it.name.equals(name, ignoreCase = true) }
+        if (duplicate != null) {
+            onDuplicateName(duplicate)
+            return
+        }
+
+        val newProfile = EncryptionProfile(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            description = description,
+            layers = layers,
+            kdfConfig = kdfOverride,
+            isCompressionEnabled = compress,
+            isBuiltIn = false
+        )
+
+        currentCustom.add(newProfile)
+        prefs.saveCustomProfiles(currentCustom)
+        loadProfiles()
+        selectProfile(newProfile)
+        onSuccess()
+        addLog("Profile Saved: $name")
+    }
+
+    fun overwriteProfile(profile: EncryptionProfile) {
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        val index = currentCustom.indexOfFirst { it.name.equals(profile.name, ignoreCase = true) }
+        if (index != -1) {
+            currentCustom[index] = profile
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            selectProfile(profile)
+            addLog("Profile Updated: ${profile.name}")
+        }
+    }
+
+    fun deleteProfile(profileId: String) {
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        if (currentCustom.removeIf { it.id == profileId }) {
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            // Fallback to default if deleted was active
+            if (_uiState.value.activeProfile.id == profileId) {
+                selectProfile(ProfileRegistry.defaultProfile)
+            }
+            addLog("Profile Deleted.")
+        }
+    }
+
+    fun resetProfiles() {
+        prefs.saveCustomProfiles(emptyList())
+        loadProfiles()
+        selectProfile(ProfileRegistry.defaultProfile)
+        addLog("All custom profiles cleared. Reset to defaults.")
+    }
+
+    fun loadProfileToCustomMode(profile: EncryptionProfile) {
+        _uiState.update {
+            it.copy(
+                customLayers = profile.layers.map { algo -> LayerEntry(algorithm = algo) },
+                isCompressionEnabled = profile.isCompressionEnabled,
+                editingProfileId = profile.id,
+                selectedMode = SigilMode.CUSTOM
+            )
+        }
+        addLog("Editing Profile: '${profile.name}'")
+    }
+
+    fun getProfileById(id: String): EncryptionProfile? {
+        return _uiState.value.availableProfiles.find { it.id == id }
+    }
+
     // --- HELPER: KDF CONFIG INJECTION ---
-    private fun getUserKdfConfig(): CryptoEngine.KdfConfig {
+    private fun getActiveKdfConfig(): CryptoEngine.KdfConfig {
+        // 1. Check if ACTIVE PROFILE has an override
+        if (_uiState.value.selectedMode == SigilMode.AUTO) {
+            val profileKdf = _uiState.value.activeProfile.kdfConfig
+            if (profileKdf != null) return profileKdf
+        }
+
+        // 2. Fallback to Global Settings
         return CryptoEngine.KdfConfig(
             iterations = prefs.kdfIterations,
             memoryPow2 = prefs.kdfMemoryPow2,
@@ -102,7 +221,12 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- NAVIGATION ---
     fun onModeSelected(mode: SigilMode) {
-        _uiState.update { it.copy(selectedMode = mode) }
+        _uiState.update {
+            it.copy(
+                selectedMode = mode,
+                editingProfileId = if (mode == SigilMode.CUSTOM) null else it.editingProfileId
+            )
+        }
     }
 
     fun onScreenSelected(screen: AppScreen) {
@@ -205,17 +329,13 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val chain: List<CryptoEngine.Algorithm>
                 val compress: Boolean
+                val kdfConfig = getActiveKdfConfig()
 
                 if (state.selectedMode == SigilMode.AUTO) {
-                    chain = listOf(
-                        CryptoEngine.Algorithm.AES_GCM,
-                        CryptoEngine.Algorithm.CHACHA20_POLY1305,
-                        CryptoEngine.Algorithm.TWOFISH_CBC,
-                        CryptoEngine.Algorithm.SERPENT_CBC
-                    ).shuffled()
-
-                    compress = true
-                    addLog("Auto Mode: 4-Layer Hybrid Chain (AES+ChaCha+Twofish+Serpent).")
+                    val profile = state.activeProfile
+                    chain = profile.layers
+                    compress = profile.isCompressionEnabled
+                    addLog("Using Profile: ${profile.name}")
                 } else {
                     chain = state.customLayers.map { it.algorithm }
                     compress = state.isCompressionEnabled
@@ -227,7 +347,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     data = input.toByteArray(StandardCharsets.UTF_8),
                     password = pwdChars,
                     algorithms = chain,
-                    kdfConfig = getUserKdfConfig(),
+                    kdfConfig = kdfConfig,
                     compress = compress,
                     logCallback = { addLog(it) }
                 )
@@ -276,10 +396,12 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val pwdChars = pwdString.toCharArray()
             try {
+                val kdfConfig = getActiveKdfConfig()
+
                 val decryptedBytes = CryptoEngine.decrypt(
                     encryptedData = input,
                     password = pwdChars,
-                    kdfConfig = getUserKdfConfig(),
+                    kdfConfig = kdfConfig,
                     logCallback = { addLog(it) }
                 )
 
@@ -300,8 +422,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 errorReport.append("POSSIBLE CAUSES:\n")
                 errorReport.append("1. Wrong password.\n")
                 errorReport.append("2. Corrupted data.\n")
-                errorReport.append("3. Different Security Settings.\n")
-                errorReport.append("4. Legacy format (Sigil version < v0.4.5).\n")
+                errorReport.append("3. Security Settings Mismatch (Check KDF Iterations/Memory).\n")
+                errorReport.append("4. Profile Mismatch (If using custom KDF override).\n")
 
                 val finalMessage = errorReport.toString()
 
@@ -398,7 +520,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-// --- DEMO / ONBOARDING CONTROL ---
+    // --- DEMO / ONBOARDING CONTROL ---
     // 1. Control the Docs Tab programmatically
     private val _demoDocsTabIndex = MutableStateFlow(0)
     val demoDocsTabIndex: StateFlow<Int> = _demoDocsTabIndex
@@ -557,6 +679,36 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 exitProcess(0)
             }
         }
+    }
+
+    fun resetAppPreferences() {
+        // 1. Security & General
+        prefs.lockMode = LockMode.NONE
+        prefs.isGracePeriodEnabled = false
+        prefs.graceDurationMinutes = 5
+        prefs.isScreenShieldEnabled = true
+        prefs.clipboardTimeoutSeconds = 30
+        prefs.setOnboardingCompleted(false) // Reset Onboarding
+
+        // 2. Appearance
+        prefs.isDynamicColorsEnabled = true
+        prefs.isDarkModeEnabled = true
+        prefs.selectedThemeColor = 0xFFFFFFFF.toInt()
+
+        // 3. KDF Defaults
+        prefs.kdfIterations = 10
+        prefs.kdfMemoryPow2 = 16
+        prefs.kdfParallelism = 4
+
+        addLog("Preferences reset to defaults (Vault/Profiles preserved).")
+
+        val context = getApplication<Application>()
+        val packageManager = context.packageManager
+        val intent = packageManager.getLaunchIntentForPackage(context.packageName)
+        val componentName = intent?.component
+        val mainIntent = Intent.makeRestartActivityTask(componentName)
+        context.startActivity(mainIntent)
+        exitProcess(0)
     }
 
     fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }

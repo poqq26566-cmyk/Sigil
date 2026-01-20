@@ -14,7 +14,7 @@ android {
         targetSdk = 36
         versionCode = 11
         //Todo: Change on each revision
-        versionName = "0.5.0-dev01"
+        versionName = "0.5.0-dev02"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -84,6 +84,7 @@ dependencies {
 
     // --- Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation(libs.androidx.foundation)
 
     // --- Testing ---
     testImplementation("junit:junit:4.13.2")

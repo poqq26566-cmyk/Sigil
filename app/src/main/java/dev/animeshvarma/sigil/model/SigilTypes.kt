@@ -40,6 +40,43 @@ data class SigilAlgorithm(
     val securityWarning: String? = null
 )
 
+data class EncryptionProfile(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val description: String,
+    val layers: List<CryptoEngine.Algorithm>,
+    val kdfConfig: CryptoEngine.KdfConfig? = null,
+    val isBuiltIn: Boolean = false,
+    val isCompressionEnabled: Boolean = true
+)
+
+object ProfileRegistry {
+    val defaultProfile = EncryptionProfile(
+        id = "sigil_default_chain",
+        name = "Sigil Chain",
+        description = "Sigil's hybrid stack. XChaCha20 + Serpent + Twofish + AES.",
+        layers = listOf(
+            CryptoEngine.Algorithm.XCHACHA20_POLY1305,
+            CryptoEngine.Algorithm.SERPENT_CBC,
+            CryptoEngine.Algorithm.TWOFISH_CBC,
+            CryptoEngine.Algorithm.AES_GCM
+        ),
+        isBuiltIn = true,
+        isCompressionEnabled = true
+    )
+
+    val standardProfile = EncryptionProfile(
+        id = "sigil_standard_aes",
+        name = "Standard AES",
+        description = "Fast, hardware-accelerated AES-256-GCM. Industry standard.",
+        layers = listOf(CryptoEngine.Algorithm.AES_GCM),
+        isBuiltIn = true,
+        isCompressionEnabled = true
+    )
+
+    val builtInProfiles = listOf(defaultProfile, standardProfile)
+}
+
 object AlgorithmRegistry {
     val supportedAlgorithms = listOf(
         SigilAlgorithm(
@@ -203,6 +240,12 @@ data class UiState(
     val logs: List<String> = emptyList(),
     val isLoading: Boolean = false,
     val showLogsDialog: Boolean = false,
+
+    // Profile Management
+    val availableProfiles: List<EncryptionProfile> = ProfileRegistry.builtInProfiles,
+    val activeProfile: EncryptionProfile = ProfileRegistry.defaultProfile,
+
+    val editingProfileId: String? = null,
 
     // Demo Controls
     val isDemoDropdownExpanded: Boolean = false,

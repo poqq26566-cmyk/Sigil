@@ -19,8 +19,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.ui.components.SigilSegmentedControl
@@ -87,6 +91,11 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var showVerifyPinDialog by remember { mutableStateOf(false) }
     var showColorDialog by remember { mutableStateOf(false) }
     var showSecurityErrorDialog by remember { mutableStateOf(false) }
+
+    // Danger Dialogs
+    var showResetProfilesDialog by remember { mutableStateOf(false) }
+    var showResetSettingsDialog by remember { mutableStateOf(false) }
+    var showWipeDataDialog by remember { mutableStateOf(false) }
 
     var isSavingPin by remember { mutableStateOf(false) }
 
@@ -149,7 +158,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "These settings must match exactly for encryption and decryption. Only change if you know what you are doing.",
+                        text = "Global defaults. Profiles may override this.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Medium
@@ -408,6 +417,48 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             }
         }
 
+        Spacer(Modifier.height(24.dp))
+
+        // --- DATA & PROFILES ---
+        SettingsHeader("Data Management")
+
+        OutlinedButton(
+            onClick = { showResetProfilesDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Icon(Icons.Default.Restore, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Reset Encryption Profiles")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = { showResetSettingsDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Icon(Icons.Default.SettingsBackupRestore, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Reset App Preferences")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = { showWipeDataDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+            Icon(Icons.Default.DeleteForever, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Wipe All Data")
+        }
+
         Spacer(Modifier.height(64.dp))
     }
 
@@ -556,6 +607,63 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             }
         )
     }
+
+    // CONFIRM RESET PROFILES
+    if (showResetProfilesDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetProfilesDialog = false },
+            icon = { Icon(Icons.Default.Restore, null) },
+            title = { Text("Reset Profiles") },
+            text = { Text("Delete all custom encryption profiles and restore the default list?\n\nThis cannot be undone.") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.resetProfiles()
+                    showResetProfilesDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetProfilesDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // CONFIRM RESET SETTINGS
+    if (showResetSettingsDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetSettingsDialog = false },
+            icon = { Icon(Icons.Default.SettingsBackupRestore, null) },
+            title = { Text("Reset Preferences") },
+            text = { Text("Reset all application settings (Theme, Security, KDF) to defaults?\n\nThis will also clear any 'Remember my choice' saved decisions.") },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.resetAppPreferences()
+                    showResetSettingsDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSettingsDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // CONFIRM WIPE ALL
+    if (showWipeDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showWipeDataDialog = false },
+            icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Scorched Earth") },
+            text = { Text("This will permanently delete ALL data, including:\n- Keys in Vault\n- Settings & Profiles\n- PINs & Biometrics\n\nThe app will restart.") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.wipeAllData() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("NUKE IT") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeDataDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
@@ -625,7 +733,8 @@ fun AdvancedColorPickerDialog(
     fun updateFromHex(hex: String) {
         try {
             if (hex.length == 6) {
-                val color = Color(android.graphics.Color.parseColor("#$hex"))
+                // Fix: Use KTX toColorInt for cleaner logic
+                val color = Color("#$hex".toColorInt())
                 currentColor = color
                 android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
                 updateInputs(color)
