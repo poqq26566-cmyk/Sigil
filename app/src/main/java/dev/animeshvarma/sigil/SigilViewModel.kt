@@ -69,12 +69,20 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     private fun loadProfiles() {
         val customProfiles = prefs.getCustomProfiles()
         val allProfiles = ProfileRegistry.builtInProfiles + customProfiles
+
+        val savedId = prefs.activeProfileId
+        val active = allProfiles.find { it.id == savedId } ?: ProfileRegistry.defaultProfile
+
         _uiState.update {
-            it.copy(availableProfiles = allProfiles)
+            it.copy(
+                availableProfiles = allProfiles,
+                activeProfile = active
+            )
         }
     }
 
     fun selectProfile(profile: EncryptionProfile) {
+        prefs.activeProfileId = profile.id
         _uiState.update { it.copy(activeProfile = profile) }
         addLog("Profile Switched: ${profile.name}")
     }

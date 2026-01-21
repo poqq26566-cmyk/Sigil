@@ -28,6 +28,7 @@ class SigilPreferences(context: Context) {
         private const val KEY_DARK_MODE = "dark_mode_enabled"
         private const val KEY_THEME_COLOR = "theme_color_int"
         private const val KEY_SAVED_PROFILES = "saved_encryption_profiles"
+        private const val KEY_ACTIVE_PROFILE_ID = "active_encryption_profile_id"
     }
 
     fun hasCompletedOnboarding(): Boolean {
@@ -98,6 +99,10 @@ class SigilPreferences(context: Context) {
         set(value) = prefs.edit { putInt(KEY_KDF_PARALLELISM, value) }
 
     // --- PROFILE PERSISTENCE ---
+    var activeProfileId: String?
+        get() = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
+        set(value) = prefs.edit { putString(KEY_ACTIVE_PROFILE_ID, value) }
+
     fun getCustomProfiles(): List<EncryptionProfile> {
         val jsonString = prefs.getString(KEY_SAVED_PROFILES, "[]") ?: "[]"
         val profiles = mutableListOf<EncryptionProfile>()
