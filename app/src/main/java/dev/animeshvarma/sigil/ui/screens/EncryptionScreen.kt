@@ -57,6 +57,16 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
     val vaultEntries by viewModel.vaultEntries.collectAsState()
     var showProfileSheet by remember { mutableStateOf(false) }
 
+    // --- TOAST HELPER ---
+    val currentToast = remember { mutableStateOf<Toast?>(null) }
+
+    val showToast: (String) -> Unit = { message ->
+        currentToast.value?.cancel()
+        val toast = Toast.makeText(context, message, Toast.LENGTH_SHORT)
+        currentToast.value = toast
+        toast.show()
+    }
+
     // Lifecycle safety for sheet
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -164,7 +174,6 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
                     IconButton(onClick = {
                         if (uiState.autoOutput.isNotEmpty()) {
                             viewModel.copyToClipboardSecurely(uiState.autoOutput, "Sigil Output")
-                            Toast.makeText(context, "Copied to secure clipboard", Toast.LENGTH_SHORT).show()
                         }
                     }) {
                         Icon(
@@ -201,7 +210,7 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
                     FilledTonalButton(onClick = {
                         showProfileSheet = false
                         viewModel.onModeSelected(SigilMode.CUSTOM)
-                        Toast.makeText(context, "Switched to Custom Mode", Toast.LENGTH_SHORT).show()
+                        showToast("Switched to Custom Mode")
                     }) {
                         Icon(Icons.Default.Add, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
@@ -225,16 +234,19 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
                             isActive = profile.id == uiState.activeProfile.id,
                             onSelect = {
                                 viewModel.selectProfile(it)
-                                Toast.makeText(context, "Activated: ${it.name}", Toast.LENGTH_SHORT).show()
+                                // UPDATED: Use helper
+                                showToast("Activated: ${it.name}")
                             },
                             onEdit = {
                                 viewModel.loadProfileToCustomMode(it)
                                 showProfileSheet = false
-                                Toast.makeText(context, "Editing ${it.name}", Toast.LENGTH_SHORT).show()
+                                // UPDATED: Use helper
+                                showToast("Editing ${it.name}")
                             },
                             onDelete = {
                                 viewModel.deleteProfile(it.id)
-                                Toast.makeText(context, "Profile deleted", Toast.LENGTH_SHORT).show()
+                                // UPDATED: Use helper
+                                showToast("Profile deleted")
                             }
                         )
                     }
@@ -298,7 +310,7 @@ fun ExpandableProfileCard(
                     // Mini Badges Row
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (profile.isBuiltIn) {
-                            BadgeText("Default", MaterialTheme.colorScheme.secondary)
+                            BadgeText("Built-in", MaterialTheme.colorScheme.secondary)
                             Spacer(Modifier.width(6.dp))
                         }
 
@@ -306,7 +318,7 @@ fun ExpandableProfileCard(
                         BadgeText("${profile.layers.size} Algos")
 
                         // Compression
-                        if (profile.isCompressionEnabled) {
+                        if (profile.isCompressionEnabled && !profile.isRaw) {
                             Spacer(Modifier.width(6.dp))
                             BadgeText("CMP", MaterialTheme.colorScheme.tertiary)
                         }
@@ -314,13 +326,19 @@ fun ExpandableProfileCard(
                         // KDF
                         if (profile.kdfConfig != null) {
                             Spacer(Modifier.width(6.dp))
-                            BadgeText("KDF+", MaterialTheme.colorScheme.secondary)
+                            BadgeText("KDF+", MaterialTheme.colorScheme.tertiary)
                         }
 
                         // Weak Warning
                         if (isWeak) {
                             Spacer(Modifier.width(6.dp))
                             BadgeText("Weak", MaterialTheme.colorScheme.error)
+                        }
+
+                        // Raw Badge
+                        if (profile.isRaw) {
+                            Spacer(Modifier.width(6.dp))
+                            BadgeText("RAW", MaterialTheme.colorScheme.tertiary)
                         }
                     }
                 }

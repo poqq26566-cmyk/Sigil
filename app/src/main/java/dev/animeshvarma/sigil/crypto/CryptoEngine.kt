@@ -99,7 +99,7 @@ object CryptoEngine {
 
         // 2. Root Secret (Argon2id)
         val passBytes = toBytes(password)
-        val rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
+        val rootSecret = deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
         passBytes.fill(0.toByte())
 
         logCallback("Root Secret derived (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
@@ -179,6 +179,7 @@ object CryptoEngine {
         return stripPadding(encoder.encodeToString(finalBytes))
     }
 
+    // --- MAIN CHAIN DECRYPTION ---
     fun decrypt(
         encryptedData: String,
         password: CharArray,
@@ -212,7 +213,7 @@ object CryptoEngine {
 
             // Reconstruct Root
             val passBytes = toBytes(password)
-            rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
+            rootSecret = deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
             passBytes.fill(0.toByte())
             logCallback("Root Secret reconstructed (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
@@ -282,6 +283,93 @@ object CryptoEngine {
             throw IllegalArgumentException(genericError)
         } finally {
             rootSecret?.fill(0.toByte())
+        }
+    }
+
+    // --- RAW / STANDALONE MODE ---
+    fun encryptRaw(
+        data: ByteArray,
+        password: CharArray,
+        algorithm: Algorithm,
+        kdfConfig: KdfConfig,
+        logCallback: (String) -> Unit = {}
+    ): String {
+        require(data.size <= MAX_DATA_LIMIT) { "Input exceeds 10MB safety limit." }
+
+        val startTime = System.currentTimeMillis()
+        logCallback("Starting Raw Encryption (${algorithm.name})...")
+
+        // 1. Generate Salt
+        val salt = ByteArray(16).apply { secureRandom.nextBytes(this) }
+
+        // 2. Generate IV (Dynamic Size)
+        val ivSize = getIvSize(algorithm)
+        val iv = ByteArray(ivSize).apply { secureRandom.nextBytes(this) }
+
+        // 3. Derive Key (Argon2id direct to Key Size)
+        val keySize = getKeySize(algorithm)
+        val passBytes = toBytes(password)
+        val key = deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+        passBytes.fill(0.toByte())
+
+        logCallback("Key derived (Argon2id).")
+
+        // 4. Encrypt using generalized processor
+        val ciphertext = processCipher(true, algorithm, data, key, iv)
+        key.fill(0.toByte())
+
+        // 5. Pack (Salt + IV + Ciphertext)
+        val output = ByteBuffer.allocate(salt.size + iv.size + ciphertext.size)
+            .put(salt)
+            .put(iv)
+            .put(ciphertext)
+            .array()
+
+        logCallback("Raw Encryption complete in ${System.currentTimeMillis() - startTime}ms.")
+
+        return encoder.encodeToString(output)
+    }
+
+    fun decryptRaw(
+        encryptedData: String,
+        password: CharArray,
+        algorithm: Algorithm,
+        kdfConfig: KdfConfig,
+        logCallback: (String) -> Unit = {}
+    ): ByteArray {
+        val startTime = System.currentTimeMillis()
+        logCallback("Reading Raw Container...")
+
+        try {
+            // 1. Decode
+            val cleanData = encryptedData.filter { !it.isWhitespace() }
+            val rawBytes = decoder.decode(cleanData)
+
+            val ivSize = getIvSize(algorithm)
+            val minSize = 16 + ivSize // Salt + IV
+            if (rawBytes.size <= minSize) throw IllegalArgumentException("Invalid data size.")
+
+            // 2. Unpack
+            val buffer = ByteBuffer.wrap(rawBytes)
+            val salt = ByteArray(16); buffer.get(salt)
+            val iv = ByteArray(ivSize); buffer.get(iv)
+            val ciphertext = ByteArray(buffer.remaining()); buffer.get(ciphertext)
+
+            // 3. Derive Key
+            val keySize = getKeySize(algorithm)
+            val passBytes = toBytes(password)
+            val key = deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+            passBytes.fill(0.toByte())
+
+            // 4. Decrypt
+            val plaintext = processCipher(false, algorithm, ciphertext, key, iv)
+            key.fill(0.toByte())
+
+            logCallback("Decryption complete in ${System.currentTimeMillis() - startTime}ms.")
+            return plaintext
+
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Raw Decryption failed. Wrong password, profile, or data corruption.")
         }
     }
 
@@ -357,8 +445,7 @@ object CryptoEngine {
 
     private fun stripPadding(i: String) = i.trimEnd('=')
     private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
-
-    private fun deriveRootSecret(p: ByteArray, s: ByteArray, config: KdfConfig): ByteArray {
+    private fun deriveKeyArgon2(p: ByteArray, s: ByteArray, config: KdfConfig, length: Int): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
             .withIterations(config.iterations)
@@ -368,8 +455,8 @@ object CryptoEngine {
             .build()
         val g = Argon2BytesGenerator()
         g.init(params)
-        val r = ByteArray(32)
-        g.generateBytes(p, r, 0, 32)
+        val r = ByteArray(length)
+        g.generateBytes(p, r, 0, length)
         return r
     }
 

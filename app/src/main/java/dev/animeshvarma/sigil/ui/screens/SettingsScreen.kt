@@ -629,14 +629,62 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
     // CONFIRM RESET SETTINGS
     if (showResetSettingsDialog) {
+        var shouldRestart by remember { mutableStateOf(false) }
+
         AlertDialog(
             onDismissRequest = { showResetSettingsDialog = false },
             icon = { Icon(Icons.Default.SettingsBackupRestore, null) },
             title = { Text("Reset Preferences") },
-            text = { Text("Reset all application settings (Theme, Security, KDF) to defaults?\n\nThis will also clear any 'Remember my choice' saved decisions.") },
+            text = {
+                Column {
+                    Text("Reset all application settings (Theme, Security, KDF) to defaults?\n\nThis will update the UI immediately, application of some changes will require a restart.")
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { shouldRestart = !shouldRestart },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = shouldRestart,
+                            onCheckedChange = { shouldRestart = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Restart App immediately")
+                    }
+                }
+            },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.resetAppPreferences()
+                    // 1. Save defaults to SharedPreferences (and Restart if checked)
+                    viewModel.resetAppPreferences(shouldRestart)
+
+                    // 2. IF NOT RESTARTING, MANUALLY UPDATE UI STATE
+                    if (!shouldRestart) {
+                        onboardingToggle = true
+
+                        // Security
+                        lockMode = LockMode.NONE
+                        graceEnabled = false
+                        graceMinutes = 5f
+
+                        // KDF (Defaults based on your ViewModel/Prefs)
+                        kdfIterations = 10f
+                        kdfMemory = 16f
+                        kdfParallelism = 4f
+
+                        // Privacy
+                        clipTimeout = 30f
+                        screenShield = true
+
+                        // Appearance
+                        dynamicColors = true
+                        darkMode = true
+                        selectedColorInt = android.graphics.Color.WHITE // 0xFFFFFFFF
+                    }
+
                     showResetSettingsDialog = false
                 }) { Text("Reset") }
             },

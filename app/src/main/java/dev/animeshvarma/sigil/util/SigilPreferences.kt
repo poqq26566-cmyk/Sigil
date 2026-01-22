@@ -116,6 +116,7 @@ class SigilPreferences(context: Context) {
                     val name = obj.getString("name")
                     val desc = obj.optString("description", "Custom Profile")
                     val compress = obj.optBoolean("compress", true)
+                    val isRaw = obj.optBoolean("raw", false)
 
                     // Parse Layers
                     val layersArray = obj.getJSONArray("layers")
@@ -142,7 +143,8 @@ class SigilPreferences(context: Context) {
                         layers = layers,
                         kdfConfig = kdfConfig,
                         isBuiltIn = false,
-                        isCompressionEnabled = compress
+                        isCompressionEnabled = compress,
+                        isRaw = isRaw
                     ))
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -162,6 +164,7 @@ class SigilPreferences(context: Context) {
             obj.put("name", profile.name)
             obj.put("description", profile.description)
             obj.put("compress", profile.isCompressionEnabled)
+            obj.put("raw", profile.isRaw)
 
             val layersArray = JSONArray()
             profile.layers.forEach { algo ->
@@ -180,5 +183,27 @@ class SigilPreferences(context: Context) {
             jsonArray.put(obj)
         }
         prefs.edit { putString(KEY_SAVED_PROFILES, jsonArray.toString()) }
+    }
+
+    fun resetAllSettings(synchronous: Boolean) {
+        prefs.edit(commit = synchronous) {
+            // Security & General
+            putString(KEY_LOCK_MODE, LockMode.NONE.name)
+            putBoolean(KEY_GRACE_ENABLED, false)
+            putInt(KEY_GRACE_MINUTES, 5)
+            putBoolean(KEY_SCREEN_SHIELD, true)
+            putInt(KEY_CLIPBOARD_TIMEOUT, 30)
+            putBoolean(KEY_ONBOARDING_COMPLETED, false)
+
+            // Appearance
+            putBoolean(KEY_DYNAMIC_COLORS, true)
+            putBoolean(KEY_DARK_MODE, true)
+            putInt(KEY_THEME_COLOR, 0xFFFFFFFF.toInt())
+
+            // KDF Defaults
+            putInt(KEY_KDF_ITERATIONS, 10)
+            putInt(KEY_KDF_MEMORY, 16)
+            putInt(KEY_KDF_PARALLELISM, 4)
+        }
     }
 }

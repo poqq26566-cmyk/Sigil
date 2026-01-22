@@ -173,10 +173,9 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                 ) {
                     itemsIndexed(
                         items = uiState.customLayers,
-                        key = { _, entry -> entry.id } // Stable ID for animation
+                        key = { _, entry -> entry.id }
                     ) { index, entry ->
 
-                        // Pop Animation Logic
                         val scale = remember { Animatable(1f) }
                         val elevation = remember { Animatable(0f) }
                         val scope = rememberCoroutineScope()
@@ -348,14 +347,16 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     if (showSaveProfileDialog) {
         SaveProfileDialog(
             initialKdf = viewModel.getPrefs().let { CryptoEngine.KdfConfig(it.kdfIterations, it.kdfMemoryPow2, it.kdfParallelism) },
+            layerCount = uiState.customLayers.size,
             onDismiss = { showSaveProfileDialog = false },
-            onSave = { name, desc, kdfOverride ->
+            onSave = { name, desc, kdfOverride, isRaw ->
                 viewModel.saveProfile(
                     name = name,
                     description = desc,
                     layers = uiState.customLayers.map { it.algorithm },
                     kdfOverride = kdfOverride,
                     compress = uiState.isCompressionEnabled,
+                    isRaw = isRaw,
                     onSuccess = {
                         showSaveProfileDialog = false
                         viewModel.onModeSelected(SigilMode.AUTO)
@@ -371,39 +372,27 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
     // UPDATE CONFIRMATION DIALOG
     showOverwriteDialog?.let { existing ->
-        // Calculate Diff for UI
-        val newLayers = uiState.customLayers.map { it.algorithm.name }
-        val oldLayers = existing.layers.map { it.name }
-        val layerDiff = if (newLayers != oldLayers) "Layers changed." else "Layers unchanged."
-        val compressDiff = if (uiState.isCompressionEnabled != existing.isCompressionEnabled) "Compression setting changed." else ""
 
         AlertDialog(
             onDismissRequest = { showOverwriteDialog = null },
-            icon = { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("Update Profile?") },
-            text = {
-                Column {
-                    Text("Update '${existing.name}' with current configuration?")
-                    Spacer(Modifier.height(8.dp))
-                    Text("Changes:", fontWeight = FontWeight.Bold)
-                    Text("• $layerDiff")
-                    if (compressDiff.isNotEmpty()) Text("• $compressDiff")
-                }
-            },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Profile Exists") },
+            text = { Text("A profile named '${existing.name}' already exists. Do you want to overwrite it?") },
             confirmButton = {
                 Button(
                     onClick = {
-                        // Create updated profile reusing ID and Name, but taking new Layers/Compression
                         val updated = existing.copy(
+                            description = "Updated via Custom Mode",
                             layers = uiState.customLayers.map { it.algorithm },
-                            isCompressionEnabled = uiState.isCompressionEnabled
-                            // Note: KDF and Description preserved from original as we don't have UI to edit them in "Quick Update"
+                            isCompressionEnabled = uiState.isCompressionEnabled,
+                            // Preserve existing raw/kdf flags if overwriting via quick-update
                         )
                         viewModel.overwriteProfile(updated)
                         showOverwriteDialog = null
                         viewModel.onModeSelected(SigilMode.AUTO)
-                    }
-                ) { Text("Update") }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Overwrite") }
             },
             dismissButton = {
                 TextButton(onClick = { showOverwriteDialog = null }) { Text("Cancel") }
@@ -415,8 +404,9 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 @Composable
 fun SaveProfileDialog(
     initialKdf: CryptoEngine.KdfConfig,
+    layerCount: Int,
     onDismiss: () -> Unit,
-    onSave: (String, String, CryptoEngine.KdfConfig?) -> Unit
+    onSave: (String, String, CryptoEngine.KdfConfig?, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -426,6 +416,9 @@ fun SaveProfileDialog(
     var kdfIter by remember { mutableFloatStateOf(initialKdf.iterations.toFloat()) }
     var kdfMem by remember { mutableFloatStateOf(initialKdf.memoryPow2.toFloat()) }
     var kdfPar by remember { mutableFloatStateOf(initialKdf.parallelism.toFloat()) }
+
+    // Raw Mode State
+    var useRawMode by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -447,6 +440,31 @@ fun SaveProfileDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // RAW MODE TOGGLE (Only if 1 layer)
+                if (layerCount == 1) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (useRawMode) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                            .clickable { useRawMode = !useRawMode }
+                            .padding(4.dp)
+                    ) {
+                        Checkbox(checked = useRawMode, onCheckedChange = { useRawMode = it })
+                        Column {
+                            Text("Raw Mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Raw output only. No metadata.\n" +
+                                        "Auto-decrypt unsupported; requires manual profile selection.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(16.dp))
 
                 // Custom KDF Toggle
@@ -484,7 +502,7 @@ fun SaveProfileDialog(
                     val kdfConfig = if (useCustomKdf) {
                         CryptoEngine.KdfConfig(kdfIter.toInt(), kdfMem.toInt(), kdfPar.toInt())
                     } else null
-                    onSave(name, description, kdfConfig)
+                    onSave(name, description, kdfConfig, useRawMode)
                 },
                 enabled = name.isNotBlank()
             ) { Text("Save") }
