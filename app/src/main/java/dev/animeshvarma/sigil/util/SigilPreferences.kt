@@ -3,11 +3,14 @@ package dev.animeshvarma.sigil.util
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import android.util.Log
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LockMode
 import org.json.JSONArray
 import org.json.JSONObject
+
+private const val TAG = "SigilPreferences"
 
 class SigilPreferences(context: Context) {
 
@@ -162,11 +165,11 @@ class SigilPreferences(context: Context) {
                         isRaw = isRaw
                     ))
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.w(TAG, "Failed to parse profile at index $i", e)
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Failed to parse saved profiles JSON", e)
         }
         return profiles
     }

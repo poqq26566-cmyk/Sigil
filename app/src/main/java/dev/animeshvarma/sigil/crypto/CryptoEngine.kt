@@ -334,6 +334,10 @@ object CryptoEngine {
      * The returned container is Base64-encoded and contains, in order: 16-byte salt, IV (algorithm-dependent size),
      * and the ciphertext produced by the chosen algorithm.
      *
+     * **SECURITY WARNING:** Unlike the standard [encrypt] method, this function does NOT apply a global HMAC.
+     * If [algorithm] is not an AEAD cipher (e.g. CBC modes), the resulting ciphertext lacks integrity protection.
+     * Malicious modification of the ciphertext will not be detected during decryption. This is intended for educational purposes.
+     *
      * @param data Plaintext bytes to encrypt (must be <= 10MB).
      * @param password Password as a CharArray; its UTF-8 bytes are derived and cleared after use.
      * @param algorithm Cipher algorithm to use for encryption and IV/key sizing.
@@ -392,6 +396,10 @@ object CryptoEngine {
 
     /**
      * Decrypts a standalone raw container produced by encryptRaw.
+     *
+     * **SECURITY WARNING:** If the data was encrypted using a non-AEAD algorithm (e.g. CBC modes),
+     * this method cannot verify the integrity of the ciphertext. Tampered data may result in garbage
+     * output rather than a validation error. This is intended for educational purposes.
      *
      * @param encryptedData Base64-encoded container string (whitespace allowed) containing salt, IV, and ciphertext.
      * @param password Password as a CharArray used to derive the decryption key; the function clears this input internally.

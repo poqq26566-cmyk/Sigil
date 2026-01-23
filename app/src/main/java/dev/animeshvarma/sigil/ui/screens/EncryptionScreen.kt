@@ -320,9 +320,9 @@ fun ExpandableProfileCard(
     }
 
     // ALGO INFO DIALOG
-    if (algoInfoDialog != null) {
+    algoInfoDialog?.let { algo ->
         AlgorithmInfoDialog(
-            algo = algoInfoDialog!!,
+            algo = algo,
             onDismiss = { algoInfoDialog = null }
         )
     }
