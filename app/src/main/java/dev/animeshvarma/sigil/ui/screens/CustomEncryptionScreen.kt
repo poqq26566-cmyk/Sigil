@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -454,7 +455,7 @@ fun SaveProfileDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // RAW MODE TOGGLE (Only if 1 layer)
+                // RAW MODE TOGGLE
                 if (layerCount == 1) {
                     Spacer(Modifier.height(16.dp))
                     Row(
@@ -480,31 +481,58 @@ fun SaveProfileDialog(
 
                 Spacer(Modifier.height(16.dp))
 
-                // Custom KDF Toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable { useCustomKdf = !useCustomKdf }
+                // --- CUSTOM KDF SECTION ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = if (useCustomKdf) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { useCustomKdf = !useCustomKdf }
+                        .padding(vertical = 4.dp)
                 ) {
-                    Checkbox(checked = useCustomKdf, onCheckedChange = { useCustomKdf = it })
-                    Text("Override Key Derivation (KDF)", style = MaterialTheme.typography.bodyMedium)
-                }
-
-                AnimatedVisibility(visible = useCustomKdf) {
-                    Column(
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.3f), RoundedCornerShape(8.dp))
-                            .padding(8.dp)
+                            .padding(horizontal = 4.dp)
                     ) {
-                        Text("Iterations: ${kdfIter.toInt()}", style = MaterialTheme.typography.labelSmall)
-                        Slider(value = kdfIter, onValueChange = { kdfIter = it }, valueRange = 1f..32f)
+                        Checkbox(checked = useCustomKdf, onCheckedChange = { useCustomKdf = it })
+                        Column {
+                            Text(
+                                "Override Key Derivation (KDF)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Fine-tune trade-offs.\n" +
+                                        "Auto-decrypt unsupported; requires manual config match.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
 
-                        Text("Memory: ${(1 shl kdfMem.toInt())/1024} MB", style = MaterialTheme.typography.labelSmall)
-                        Slider(value = kdfMem, onValueChange = { kdfMem = it }, valueRange = 12f..18f)
+                    AnimatedVisibility(visible = useCustomKdf) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
 
-                        Text("Parallelism: ${kdfPar.toInt()}", style = MaterialTheme.typography.labelSmall)
-                        Slider(value = kdfPar, onValueChange = { kdfPar = it }, valueRange = 1f..8f)
+                            Text("Iterations: ${kdfIter.toInt()}", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfIter, onValueChange = { kdfIter = it }, valueRange = 1f..32f)
+
+                            Text("Memory: ${(1 shl kdfMem.toInt()) / 1024} MB", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfMem, onValueChange = { kdfMem = it }, valueRange = 12f..18f)
+
+                            Text("Parallelism: ${kdfPar.toInt()}", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfPar, onValueChange = { kdfPar = it }, valueRange = 1f..8f)
+                        }
                     }
                 }
             }
