@@ -437,6 +437,7 @@ object CryptoEngine {
      * @param pin The PIN to hash; the function will clear the PIN contents after use.
      * @param salt The salt bytes to use for derivation.
      * @return A 32-byte derived hash.
+     */
     fun hashPin(pin: CharArray, salt: ByteArray): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
