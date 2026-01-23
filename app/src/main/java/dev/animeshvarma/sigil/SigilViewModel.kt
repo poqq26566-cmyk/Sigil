@@ -177,6 +177,67 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Updates an existing custom profile by ID with new configuration.
+     *
+     * @param id The ID of the profile to update.
+     * @param name The new display name.
+     * @param description The new description.
+     * @param layers The new list of algorithms.
+     * @param kdfOverride The new KDF configuration override (or null).
+     * @param compress Whether compression is enabled.
+     * @param isRaw Whether raw mode is enabled.
+     * @param onSuccess Callback invoked after successful update.
+     */
+    fun updateExistingProfile(
+        id: String,
+        name: String,
+        description: String,
+        layers: List<CryptoEngine.Algorithm>,
+        kdfOverride: CryptoEngine.KdfConfig?,
+        compress: Boolean,
+        isRaw: Boolean,
+        onSuccess: () -> Unit
+    ) {
+        if (name.isBlank()) {
+            addLog("Error: Profile name required.")
+            return
+        }
+        if (layers.isEmpty()) {
+            addLog("Error: Cannot save empty chain.")
+            return
+        }
+
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        val index = currentCustom.indexOfFirst { it.id == id }
+
+        if (index != -1) {
+            // Check if name is taken by ANOTHER profile
+            val collision = currentCustom.any { it.id != id && it.name.equals(name, ignoreCase = true) }
+            if (collision) {
+                addLog("Error: Profile name '$name' is already taken.")
+                return
+            }
+
+            val updated = currentCustom[index].copy(
+                name = name,
+                description = description,
+                layers = layers,
+                kdfConfig = kdfOverride,
+                isCompressionEnabled = compress,
+                isRaw = isRaw
+            )
+            currentCustom[index] = updated
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            selectProfile(updated)
+            onSuccess()
+            addLog("Profile Updated: $name")
+        } else {
+            addLog("Error: Profile not found for update.")
+        }
+    }
+
+    /**
      * Replaces an existing custom encryption profile with the provided profile (matched by name, case-insensitive) and applies it as active.
      *
      * If a custom profile with the same name exists, this updates the stored custom profiles, reloads available profiles, selects the updated profile, and records a log entry.
@@ -214,18 +275,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             }
             addLog("Profile Deleted.")
         }
-    }
-
-    /**
-     * Resets custom encryption profiles to defaults.
-     *
-     * Clears all stored custom profiles, reloads the available profiles list, selects the built-in default profile, and records a log entry about the reset.
-     */
-    fun resetProfiles() {
-        prefs.saveCustomProfiles(emptyList())
-        loadProfiles()
-        selectProfile(ProfileRegistry.defaultProfile)
-        addLog("All custom profiles cleared. Reset to defaults.")
     }
 
     /**
@@ -312,7 +361,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
      * Populates the custom layer list, applies the profile's compression setting, marks the profile as
      * being edited, and records the action in the logs.
      *
-     * @param profile The EncryptionProfile to load into the custom editor. 
+     * @param profile The EncryptionProfile to load into the custom editor.
      */
     fun loadProfileToCustomMode(profile: EncryptionProfile) {
         _uiState.update {
@@ -464,7 +513,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                         compress = state.isCompressionEnabled
                     }
 
-                    if (chain.isEmpty()) throw Exception("No encryption layers selected.")
+                    if (chain.isEmpty()) throw IllegalStateException("No encryption layers selected.")
 
                     result = CryptoEngine.encrypt(
                         data = input.toByteArray(StandardCharsets.UTF_8),
@@ -578,7 +627,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     errorReport.append(" • Credentials: Is the password/key correct?\n")
                     errorReport.append(" • Integrity: The data may be corrupted or truncated.\n")
                     errorReport.append(" • Security Parameters: Check KDF iterations and memory limits.\n")
-                    errorReport.append(" • Profile Context: Ensure you aren't using a the correct profile.\n")
+                    errorReport.append(" • Profile Context: Ensure you are using the correct profile.\n")
                 }
 
                 val finalMessage = errorReport.toString()
@@ -855,47 +904,17 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Resets application preferences and ViewModel internal state, and optionally restarts the app.
+     * Toggle use of dynamic system-derived colors for the app theme.
      *
-     * This clears demo mode, resets all stored preferences to their defaults (committing them synchronously when a restart is requested), and appends a log entry. If `shouldRestart` is true, the application is restarted and the current process is terminated after preferences are committed.
-     *
-     * @param shouldRestart If true, commit preferences synchronously and restart the application process; otherwise perform a non-restarting reset.
+     * @param enabled `true` to enable dynamic colors (use system-derived palette), `false` to disable them (use app-defined colors).
      */
-    fun resetAppPreferences(shouldRestart: Boolean) {
-        // 1. Reset Internal ViewModel State
-        setDemoMode(false)
-
-        // 2. Reset Preferences
-        prefs.resetAllSettings(synchronous = shouldRestart)
-
-        addLog("Preferences reset to defaults.")
-
-        // 3. Restart if requested
-        if (shouldRestart) {
-            val context = getApplication<Application>()
-            val packageManager = context.packageManager
-            val intent = packageManager.getLaunchIntentForPackage(context.packageName)
-            val componentName = intent?.component
-            val mainIntent = Intent.makeRestartActivityTask(componentName)
-            context.startActivity(mainIntent)
-
-            // Now safe to kill process because preferences are committed
-            exitProcess(0)
-        }
-    }
-
+    fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }
     /**
- * Toggle use of dynamic system-derived colors for the app theme.
- *
- * @param enabled `true` to enable dynamic colors (use system-derived palette), `false` to disable them (use app-defined colors).
- */
-fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }
-    /**
- * Sets whether the app should use dark theme.
- *
- * @param enabled `true` to enable dark mode, `false` to disable it.
- */
-fun setDarkMode(enabled: Boolean) { prefs.isDarkModeEnabled = enabled }
+     * Sets whether the app should use dark theme.
+     *
+     * @param enabled `true` to enable dark mode, `false` to disable it.
+     */
+    fun setDarkMode(enabled: Boolean) { prefs.isDarkModeEnabled = enabled }
     /**
      * Updates the application's selected theme color and persists it in preferences.
      *

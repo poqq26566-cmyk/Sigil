@@ -52,6 +52,16 @@ object CryptoEngine {
         BLOWFISH_CBC, IDEA_CBC, CAST5_CBC, TEA_CBC, XTEA_CBC, GOST_CBC
     }
 
+    fun isAEAD(algo: Algorithm): Boolean {
+        return when (algo) {
+            Algorithm.AES_GCM,
+            Algorithm.CHACHA20_POLY1305,
+            Algorithm.XCHACHA20_POLY1305,
+            Algorithm.ARIA_256_GCM -> true
+            else -> false
+        }
+    }
+
     private fun getIvSize(algo: Algorithm): Int {
         return when (algo) {
             Algorithm.AES_GCM, Algorithm.CHACHA20_POLY1305, Algorithm.ARIA_256_GCM -> 12
@@ -328,7 +338,7 @@ object CryptoEngine {
      * @param password Password as a CharArray; its UTF-8 bytes are derived and cleared after use.
      * @param algorithm Cipher algorithm to use for encryption and IV/key sizing.
      * @param kdfConfig Argon2id parameters used to derive the encryption key.
-     * @param logCallback Optional callback receiving progress/log messages.
+     * @param logCallback Optional logging function receiving progress/log messages.
      * @return A Base64-encoded string containing salt || iv || ciphertext.
      * @throws IllegalArgumentException If `data` exceeds the 10MB safety limit.
      */
@@ -360,8 +370,11 @@ object CryptoEngine {
         logCallback("Key derived (Argon2id).")
 
         // 4. Encrypt using generalized processor
-        val ciphertext = processCipher(true, algorithm, data, key, iv)
-        key.fill(0.toByte())
+        val ciphertext = try {
+            processCipher(true, algorithm, data, key, iv)
+        } finally {
+            key.fill(0.toByte())
+        }
 
         // 5. Pack (Salt + IV + Ciphertext)
         val output = ByteBuffer.allocate(salt.size + iv.size + ciphertext.size)
@@ -369,6 +382,8 @@ object CryptoEngine {
             .put(iv)
             .put(ciphertext)
             .array()
+
+        require(output.size <= MAX_DATA_LIMIT) { "Output exceeds 10MB safety limit." }
 
         logCallback("Raw Encryption complete in ${System.currentTimeMillis() - startTime}ms.")
 
@@ -401,6 +416,8 @@ object CryptoEngine {
             val cleanData = encryptedData.filter { !it.isWhitespace() }
             val rawBytes = decoder.decode(cleanData)
 
+            if (rawBytes.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input exceeds 10MB safety limit.")
+
             val ivSize = getIvSize(algorithm)
             val minSize = 16 + ivSize // Salt + IV
             if (rawBytes.size <= minSize) throw IllegalArgumentException("Invalid data size.")
@@ -418,8 +435,11 @@ object CryptoEngine {
             passBytes.fill(0.toByte())
 
             // 4. Decrypt
-            val plaintext = processCipher(false, algorithm, ciphertext, key, iv)
-            key.fill(0.toByte())
+            val plaintext = try {
+                processCipher(false, algorithm, ciphertext, key, iv)
+            } finally {
+                key.fill(0.toByte())
+            }
 
             logCallback("Decryption complete in ${System.currentTimeMillis() - startTime}ms.")
             return plaintext
@@ -508,19 +528,19 @@ object CryptoEngine {
     }
 
     /**
- * Removes Base64 padding characters from the end of a string.
- *
- * @param i The input string (typically Base64-encoded) from which trailing `=` characters should be removed.
- * @return The input string with all trailing `=` characters removed.
- */
-private fun stripPadding(i: String) = i.trimEnd('=')
+     * Removes Base64 padding characters from the end of a string.
+     *
+     * @param i The input string (typically Base64-encoded) from which trailing `=` characters should be removed.
+     * @return The input string with all trailing `=` characters removed.
+     */
+    private fun stripPadding(i: String) = i.trimEnd('=')
     /**
- * Restores Base64 padding so the input's length becomes a multiple of four.
- *
- * @param i A Base64-encoded string that may have had trailing '=' padding removed.
- * @return The input string with '=' characters appended as needed to reach a length divisible by 4.
- */
-private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
+     * Restores Base64 padding so the input's length becomes a multiple of four.
+     *
+     * @param i A Base64-encoded string that may have had trailing '=' padding removed.
+     * @return The input string with '=' characters appended as needed to reach a length divisible by 4.
+     */
+    private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
     /**
      * Derives a fixed-length key from password bytes and a salt using Argon2id with the provided KDF parameters.
      *

@@ -6,9 +6,8 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -75,7 +74,6 @@ class MainActivity : AppCompatActivity() {
                 Lifecycle.Event.ON_START -> {
                     updateSecureFlag()
 
-
                     if (lockManager.isAppLocked()) {
                         isContentHidden.value = true
                         viewModel.clearSensitiveData()
@@ -104,31 +102,35 @@ class MainActivity : AppCompatActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
-                        // Show LockScreen if hidden
-                        if (isContentHidden.value && prefs.lockMode != LockMode.NONE) {
-                            LockScreen(
-                                viewModel = viewModel,
-                                onUnlock = {
-                                    isContentHidden.value = false
-                                    viewModel.consumePendingIntent()
-                                }
-                            )
-                        } else {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(tween(300))
-                            ) {
-                                SigilApp(viewModel = viewModel)
-                            }
+                        val isLocked = isContentHidden.value && prefs.lockMode != LockMode.NONE
 
-                            if (showOnboarding.value) {
-                                OnboardingOrchestrator(
+                        Crossfade(
+                            targetState = isLocked,
+                            animationSpec = tween(400),
+                            label = "LockScreenTransition"
+                        ) { locked ->
+                            if (locked) {
+                                LockScreen(
                                     viewModel = viewModel,
-                                    onComplete = {
-                                        prefs.setOnboardingCompleted(true)
-                                        showOnboarding.value = false
+                                    onUnlock = {
+                                        isContentHidden.value = false
+                                        viewModel.consumePendingIntent()
                                     }
                                 )
+                            } else {
+                                Box(modifier = Modifier.fillMaxSize()) {
+                                    SigilApp(viewModel = viewModel)
+
+                                    if (showOnboarding.value) {
+                                        OnboardingOrchestrator(
+                                            viewModel = viewModel,
+                                            onComplete = {
+                                                prefs.setOnboardingCompleted(true)
+                                                showOnboarding.value = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

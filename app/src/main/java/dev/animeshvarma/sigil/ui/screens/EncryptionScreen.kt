@@ -6,9 +6,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,7 +59,7 @@ import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
  * @param viewModel ViewModel that manages state and handles user actions (vault, profile management, encryption, logging, clipboard).
  * @param uiState Current UI state used to populate fields, available profiles, and active profile information.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
     val context = LocalContext.current
@@ -238,25 +236,20 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
                         items = uiState.availableProfiles,
                         key = { it.id }
                     ) { profile ->
-                        Modifier.animateItem(placementSpec = tween(durationMillis = 300))
-
                         ExpandableProfileCard(
                             profile = profile,
                             isActive = profile.id == uiState.activeProfile.id,
                             onSelect = {
                                 viewModel.selectProfile(it)
-                                // UPDATED: Use helper
                                 showToast("Activated: ${it.name}")
                             },
                             onEdit = {
                                 viewModel.loadProfileToCustomMode(it)
                                 showProfileSheet = false
-                                // UPDATED: Use helper
                                 showToast("Editing ${it.name}")
                             },
                             onDelete = {
                                 viewModel.deleteProfile(it.id)
-                                // UPDATED: Use helper
                                 showToast("Profile deleted")
                             }
                         )
@@ -271,16 +264,8 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
  * Renders an expandable card for an encryption profile that shows name, badges, algorithm chain,
  * active state, and provides actions to select, edit, delete, and view per-algorithm details.
  *
- * The card toggles between a compact header and expanded details, highlights the active profile,
- * displays warnings for weak algorithms, and shows an algorithm info dialog when an algorithm chip is tapped.
- *
- * @param profile The EncryptionProfile to display.
- * @param isActive Whether this profile is currently active; affects visual emphasis and the action shown.
- * @param onSelect Callback invoked with the profile when the user chooses to use this profile.
- * @param onEdit Callback invoked with the profile when the user requests to edit it.
- * @param onDelete Callback invoked with the profile when the user requests to delete it.
+ * Broken down into sub-components (Header, BadgeRow, ExpandedContent) to reduce complexity.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExpandableProfileCard(
     profile: EncryptionProfile,
@@ -313,197 +298,281 @@ fun ExpandableProfileCard(
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(Modifier.padding(12.dp)) {
-            // --- HEADER ROW (Always Visible) ---
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Left Side: Name + Badges
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        if (isActive) {
-                            Spacer(Modifier.width(6.dp))
-                            Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                        }
-                    }
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Mini Badges Row
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (profile.isBuiltIn) {
-                            BadgeText("Built-in", MaterialTheme.colorScheme.secondary)
-                            Spacer(Modifier.width(6.dp))
-                        }
-
-                        // Algo Count
-                        BadgeText("${profile.layers.size} Algos")
-
-                        // Compression
-                        if (profile.isCompressionEnabled && !profile.isRaw) {
-                            Spacer(Modifier.width(6.dp))
-                            BadgeText("CMP", MaterialTheme.colorScheme.tertiary)
-                        }
-
-                        // KDF
-                        if (profile.kdfConfig != null) {
-                            Spacer(Modifier.width(6.dp))
-                            BadgeText("KDF+", MaterialTheme.colorScheme.tertiary)
-                        }
-
-                        // Weak Warning
-                        if (isWeak) {
-                            Spacer(Modifier.width(6.dp))
-                            BadgeText("Weak", MaterialTheme.colorScheme.error)
-                        }
-
-                        // Raw Badge
-                        if (profile.isRaw) {
-                            Spacer(Modifier.width(6.dp))
-                            BadgeText("RAW", MaterialTheme.colorScheme.tertiary)
-                        }
-                    }
-                }
-
-                // Right Side: Selection Action + Expand
-                Row(verticalAlignment = Alignment.CenterVertically) {
-
-                    // SWITCHING LOGIC: Use vs Active Badge
-                    AnimatedVisibility(visible = !isActive) {
-                        OutlinedButton(
-                            onClick = { onSelect(profile) },
-                            modifier = Modifier.height(36.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("Use")
-                        }
-                    }
-
-                    AnimatedVisibility(visible = isActive) {
-                        // Badge style button for Active state
-                        Button(
-                            onClick = {},
-                            enabled = false,
-                            modifier = Modifier.height(36.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                disabledContainerColor = MaterialTheme.colorScheme.primary,
-                                disabledContentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Active")
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
-
-                    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "ExpandArrow")
-                    Icon(
-                        Icons.Default.ExpandMore,
-                        null,
-                        modifier = Modifier.rotate(rotation),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            // --- HEADER (Always Visible) ---
+            ProfileCardHeader(
+                profile = profile,
+                isActive = isActive,
+                isWeak = isWeak,
+                expanded = expanded,
+                onSelect = onSelect
+            )
 
             // --- EXPANDED CONTENT ---
             AnimatedVisibility(visible = expanded) {
-                Column(Modifier.padding(top = 12.dp)) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(8.dp))
-
-                    // Description
-                    if (profile.description.isNotBlank()) {
-                        Text(
-                            profile.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                    }
-
-                    // Layer Chain Flow
-                    Text("Algorithm Chain (Tap for info):", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    FlowRow(
-                        modifier = Modifier.padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        profile.layers.forEachIndexed { index, algo ->
-                            SuggestionChip(
-                                onClick = { algoInfoDialog = algo },
-                                label = { Text(algo.name.replace("_", "-")) },
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.height(24.dp)
-                            )
-                            if (index < profile.layers.size - 1) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(12.dp).align(Alignment.CenterVertically), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-
-                    if (!profile.isBuiltIn) {
-                        Spacer(Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            OutlinedButton(
-                                onClick = { onDelete(profile) },
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                modifier = Modifier.height(32.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                            ) {
-                                Icon(Icons.Default.Delete, null, Modifier.size(14.dp))
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            OutlinedButton(
-                                onClick = { onEdit(profile) },
-                                contentPadding = PaddingValues(horizontal = 12.dp),
-                                modifier = Modifier.height(32.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, null, Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Edit", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
+                ProfileExpandedContent(
+                    profile = profile,
+                    onChipClick = { algoInfoDialog = it },
+                    onEdit = onEdit,
+                    onDelete = onDelete
+                )
             }
         }
     }
 
     // ALGO INFO DIALOG
-    algoInfoDialog?.let { algo ->
-        val details = AlgorithmRegistry.supportedAlgorithms.find { it.id == algo.name }
-        AlertDialog(
-            onDismissRequest = { algoInfoDialog = null },
-            icon = { Icon(Icons.Default.Info, null) },
-            title = { Text(details?.name ?: algo.name) },
-            text = {
-                Column {
-                    Text(details?.description ?: "No description available.")
-                    Spacer(Modifier.height(8.dp))
-                    Text("Type: ${details?.type ?: "Unknown"}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                    if (details?.isWeak == true) {
-                        Text("Warning: ${details.securityWarning}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { algoInfoDialog = null }) { Text("Close") }
-            }
+    if (algoInfoDialog != null) {
+        AlgorithmInfoDialog(
+            algo = algoInfoDialog!!,
+            onDismiss = { algoInfoDialog = null }
         )
     }
+}
+
+/**
+ * Sub-component: Displays the top row of the card (Name, badges, action button, arrow).
+ */
+@Composable
+private fun ProfileCardHeader(
+    profile: EncryptionProfile,
+    isActive: Boolean,
+    isWeak: Boolean,
+    expanded: Boolean,
+    onSelect: (EncryptionProfile) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Left Side: Name + Badges
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (isActive) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            ProfileBadgeRow(profile, isWeak)
+        }
+
+        // Right Side: Selection Action + Expand Arrow
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Use vs Active Button
+            AnimatedVisibility(visible = !isActive) {
+                OutlinedButton(
+                    onClick = { onSelect(profile) },
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Use")
+                }
+            }
+
+            AnimatedVisibility(visible = isActive) {
+                Button(
+                    onClick = {},
+                    enabled = false,
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        disabledContainerColor = MaterialTheme.colorScheme.primary,
+                        disabledContentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Active")
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "ExpandArrow")
+            Icon(
+                Icons.Default.ExpandMore,
+                null,
+                modifier = Modifier.rotate(rotation),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Sub-component: Displays the row of small badges (Built-in, Count, CMP, KDF, Weak).
+ */
+@Composable
+private fun ProfileBadgeRow(profile: EncryptionProfile, isWeak: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (profile.isBuiltIn) {
+            BadgeText("Built-in", MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.width(6.dp))
+        }
+
+        // Algo Count
+        BadgeText("${profile.layers.size} Algos")
+
+        // Compression
+        if (profile.isCompressionEnabled && !profile.isRaw) {
+            Spacer(Modifier.width(6.dp))
+            BadgeText("CMP", MaterialTheme.colorScheme.tertiary)
+        }
+
+        // KDF
+        if (profile.kdfConfig != null) {
+            Spacer(Modifier.width(6.dp))
+            BadgeText("KDF+", MaterialTheme.colorScheme.tertiary)
+        }
+
+        // Weak Warning
+        if (isWeak) {
+            Spacer(Modifier.width(6.dp))
+            BadgeText("Weak", MaterialTheme.colorScheme.error)
+        }
+
+        // Raw Badge
+        if (profile.isRaw) {
+            Spacer(Modifier.width(6.dp))
+            BadgeText("RAW", MaterialTheme.colorScheme.tertiary)
+        }
+    }
+}
+
+/**
+ * Sub-component: Displays the content shown when the card is expanded (Description, Chips, Edit/Delete Actions).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProfileExpandedContent(
+    profile: EncryptionProfile,
+    onChipClick: (CryptoEngine.Algorithm) -> Unit,
+    onEdit: (EncryptionProfile) -> Unit,
+    onDelete: (EncryptionProfile) -> Unit
+) {
+    Column(Modifier.padding(top = 12.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(8.dp))
+
+        // Description
+        if (profile.description.isNotBlank()) {
+            Text(
+                profile.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // Layer Chain Flow
+        Text("Algorithm Chain (Tap for info):", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+        FlowRow(
+            modifier = Modifier.padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            profile.layers.forEachIndexed { index, algo ->
+                SuggestionChip(
+                    onClick = { onChipClick(algo) },
+                    label = { Text(algo.name.replace("_", "-")) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.height(24.dp)
+                )
+                if (index < profile.layers.size - 1) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        null,
+                        modifier = Modifier
+                            .size(12.dp)
+                            .align(Alignment.CenterVertically),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        if (!profile.isBuiltIn) {
+            Spacer(Modifier.height(16.dp))
+            ProfileActionButtons(
+                profile = profile,
+                onEdit = onEdit,
+                onDelete = onDelete
+            )
+        }
+    }
+}
+
+/**
+ * Sub-component: Edit and Delete buttons for the expanded view.
+ */
+@Composable
+private fun ProfileActionButtons(
+    profile: EncryptionProfile,
+    onEdit: (EncryptionProfile) -> Unit,
+    onDelete: (EncryptionProfile) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        OutlinedButton(
+            onClick = { onDelete(profile) },
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            modifier = Modifier.height(32.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+        ) {
+            Icon(Icons.Default.Delete, null, Modifier.size(14.dp))
+        }
+        Spacer(Modifier.width(8.dp))
+        OutlinedButton(
+            onClick = { onEdit(profile) },
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            modifier = Modifier.height(32.dp)
+        ) {
+            Icon(Icons.Default.Edit, null, Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Edit", fontSize = 12.sp)
+        }
+    }
+}
+
+/**
+ * Sub-component: The Alert Dialog showing algorithm details.
+ */
+@Composable
+private fun AlgorithmInfoDialog(
+    algo: CryptoEngine.Algorithm,
+    onDismiss: () -> Unit
+) {
+    val details = AlgorithmRegistry.supportedAlgorithms.find { it.id == algo.name }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.Info, null) },
+        title = { Text(details?.name ?: algo.name) },
+        text = {
+            Column {
+                Text(details?.description ?: "No description available.")
+                Spacer(Modifier.height(8.dp))
+                Text("Type: ${details?.type ?: "Unknown"}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                if (details?.isWeak == true) {
+                    Text(
+                        "Warning: ${details.securityWarning ?: "Weak cipher"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 /**

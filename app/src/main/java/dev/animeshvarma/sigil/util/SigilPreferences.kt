@@ -209,32 +209,51 @@ class SigilPreferences(context: Context) {
     }
 
     /**
-     * Reset all stored user preferences to their predefined defaults.
+     * Resets specific categories of user preferences.
      *
-     * This restores default values for security & general settings (lock mode, grace period, clipboard timeout, onboarding),
-     * appearance settings (dynamic colors, dark mode, theme color), and KDF parameters (iterations, memory, parallelism).
-     *
-     * @param synchronous If `true`, write the changes synchronously (commit); if `false`, schedule the write asynchronously (apply).
+     * @param resetGeneral Security, Lock Mode, Onboarding, Screen Shield, Clipboard.
+     * @param resetAppearance Dynamic Colors, Dark Mode, Theme Color.
+     * @param resetKdf Iterations, Memory, Parallelism.
+     * @param resetProfiles Saved Encryption Profiles and Active Profile ID.
+     * @param synchronous If `true`, write changes synchronously.
      */
-    fun resetAllSettings(synchronous: Boolean) {
+    fun resetSettings(
+        resetGeneral: Boolean,
+        resetAppearance: Boolean,
+        resetKdf: Boolean,
+        resetProfiles: Boolean,
+        synchronous: Boolean
+    ) {
         prefs.edit(commit = synchronous) {
-            // Security & General
-            putString(KEY_LOCK_MODE, LockMode.NONE.name)
-            putBoolean(KEY_GRACE_ENABLED, false)
-            putInt(KEY_GRACE_MINUTES, 5)
-            putBoolean(KEY_SCREEN_SHIELD, true)
-            putInt(KEY_CLIPBOARD_TIMEOUT, 30)
-            putBoolean(KEY_ONBOARDING_COMPLETED, false)
+            if (resetGeneral) {
+                // Security & General
+                putString(KEY_LOCK_MODE, LockMode.NONE.name)
+                putBoolean(KEY_GRACE_ENABLED, false)
+                putInt(KEY_GRACE_MINUTES, 5)
+                putBoolean(KEY_SCREEN_SHIELD, true)
+                putInt(KEY_CLIPBOARD_TIMEOUT, 30)
+                putBoolean(KEY_ONBOARDING_COMPLETED, false)
+            }
 
-            // Appearance
-            putBoolean(KEY_DYNAMIC_COLORS, true)
-            putBoolean(KEY_DARK_MODE, true)
-            putInt(KEY_THEME_COLOR, 0xFFFFFFFF.toInt())
+            if (resetAppearance) {
+                // Appearance
+                putBoolean(KEY_DYNAMIC_COLORS, true)
+                putBoolean(KEY_DARK_MODE, true)
+                putInt(KEY_THEME_COLOR, 0xFFFFFFFF.toInt())
+            }
 
-            // KDF Defaults
-            putInt(KEY_KDF_ITERATIONS, 10)
-            putInt(KEY_KDF_MEMORY, 16)
-            putInt(KEY_KDF_PARALLELISM, 4)
+            if (resetKdf) {
+                // KDF Defaults
+                putInt(KEY_KDF_ITERATIONS, 10)
+                putInt(KEY_KDF_MEMORY, 16)
+                putInt(KEY_KDF_PARALLELISM, 4)
+            }
+
+            if (resetProfiles) {
+                // Profiles
+                putString(KEY_SAVED_PROFILES, "[]")
+                remove(KEY_ACTIVE_PROFILE_ID)
+            }
         }
     }
 }

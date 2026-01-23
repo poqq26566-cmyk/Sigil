@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -82,11 +83,19 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     var showAddLayerSheet by remember { mutableStateOf(false) }
     var showSaveProfileDialog by remember { mutableStateOf(false) }
     var showOverwriteDialog by remember { mutableStateOf<EncryptionProfile?>(null) }
+
+    // Safety warnings for Raw Mode
+    var showRawSecurityWarning by remember { mutableStateOf(false) }
+    var pendingSaveData by remember { mutableStateOf<PendingProfileData?>(null) }
+
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 showAddLayerSheet = false
+                showSaveProfileDialog = false
+                showOverwriteDialog = null
+                showRawSecurityWarning = false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -103,6 +112,11 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     val spaceInputToPass = 10.dp
     val spacePassToButtons = 17.dp
     val spaceButtonsToOutput = 8.dp
+
+    // Retrieve currently edited profile (if any) to preserve its KDF/Raw settings
+    val editingProfile = remember(uiState.editingProfileId) {
+        uiState.editingProfileId?.let { viewModel.getProfileById(it) }
+    }
 
     Column(modifier = Modifier.fillMaxHeight()) {
         Spacer(modifier = Modifier.height(7.dp))
@@ -144,16 +158,8 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                     // SAVE PROFILE BUTTON
                     SmallFloatingActionButton(
                         onClick = {
-                            if (uiState.editingProfileId != null) {
-                                val original = viewModel.getProfileById(uiState.editingProfileId)
-                                if (original != null) {
-                                    showOverwriteDialog = original
-                                } else {
-                                    showSaveProfileDialog = true
-                                }
-                            } else {
-                                showSaveProfileDialog = true
-                            }
+                            // Always open the dialog to allow editing settings (Name, KDF, Raw)
+                            showSaveProfileDialog = true
                         },
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -371,27 +377,134 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
 
     // --- DIALOGS ---
     if (showSaveProfileDialog) {
+        // Prepare initial state from editing profile or defaults
+        val defaultKdf = viewModel.getPrefs().let { CryptoEngine.KdfConfig(it.kdfIterations, it.kdfMemoryPow2, it.kdfParallelism) }
+        val initialName = editingProfile?.name ?: ""
+        val initialDesc = editingProfile?.description ?: ""
+        val initialKdfOverride = editingProfile?.kdfConfig
+        val initialIsRaw = editingProfile?.isRaw ?: false
+
         SaveProfileDialog(
-            initialKdf = viewModel.getPrefs().let { CryptoEngine.KdfConfig(it.kdfIterations, it.kdfMemoryPow2, it.kdfParallelism) },
+            initialName = initialName,
+            initialDescription = initialDesc,
+            initialKdfOverride = initialKdfOverride,
+            defaultKdf = defaultKdf,
+            initialIsRaw = initialIsRaw,
             layerCount = uiState.customLayers.size,
             onDismiss = { showSaveProfileDialog = false },
             onSave = { name, desc, kdfOverride, isRaw ->
-                viewModel.saveProfile(
-                    name = name,
-                    description = desc,
-                    layers = uiState.customLayers.map { it.algorithm },
-                    kdfOverride = kdfOverride,
-                    compress = uiState.isCompressionEnabled,
-                    isRaw = isRaw,
-                    onSuccess = {
-                        showSaveProfileDialog = false
-                        viewModel.onModeSelected(SigilMode.AUTO)
-                    },
-                    onDuplicateName = { existing ->
-                        showSaveProfileDialog = false
-                        showOverwriteDialog = existing
+                // Check if Raw Mode is unsafe (no integrity/MAC)
+                val currentAlgo = uiState.customLayers.firstOrNull()?.algorithm
+                val isUnsafeRaw = isRaw &&
+                        uiState.customLayers.size == 1 &&
+                        currentAlgo != null &&
+                        !CryptoEngine.isAEAD(currentAlgo)
+
+                val performSave = {
+                    if (editingProfile != null) {
+                        viewModel.updateExistingProfile(
+                            id = editingProfile.id,
+                            name = name,
+                            description = desc,
+                            layers = uiState.customLayers.map { it.algorithm },
+                            kdfOverride = kdfOverride,
+                            compress = uiState.isCompressionEnabled,
+                            isRaw = isRaw,
+                            onSuccess = {
+                                showSaveProfileDialog = false
+                                viewModel.onModeSelected(SigilMode.AUTO)
+                            }
+                        )
+                    } else {
+                        viewModel.saveProfile(
+                            name = name,
+                            description = desc,
+                            layers = uiState.customLayers.map { it.algorithm },
+                            kdfOverride = kdfOverride,
+                            compress = uiState.isCompressionEnabled,
+                            isRaw = isRaw,
+                            onSuccess = {
+                                showSaveProfileDialog = false
+                                viewModel.onModeSelected(SigilMode.AUTO)
+                            },
+                            onDuplicateName = { existing ->
+                                showSaveProfileDialog = false
+                                showOverwriteDialog = existing
+                            }
+                        )
                     }
+                }
+
+                if (isUnsafeRaw) {
+                    pendingSaveData = PendingProfileData(name, desc, kdfOverride, true)
+                    showRawSecurityWarning = true
+                    showSaveProfileDialog = false
+                } else {
+                    performSave()
+                }
+            }
+        )
+    }
+
+    if (showRawSecurityWarning) {
+        val algoName = uiState.customLayers.firstOrNull()?.algorithm?.name ?: "Unknown"
+        AlertDialog(
+            onDismissRequest = { showRawSecurityWarning = false },
+            icon = { Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Security Warning") },
+            text = {
+                Text(
+                    "Raw Mode with $algoName lacks integrity checks (No MAC).\n\n" +
+                            "Tampering with data will not be detected. \n\n" +
+                            "Do you want to proceed anyway or return to use the standard chain?"
                 )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // Proceed anyway
+                        pendingSaveData?.let { data ->
+                            if (editingProfile != null) {
+                                viewModel.updateExistingProfile(
+                                    id = editingProfile.id,
+                                    name = data.name,
+                                    description = data.desc,
+                                    layers = uiState.customLayers.map { it.algorithm },
+                                    kdfOverride = data.kdf,
+                                    compress = uiState.isCompressionEnabled,
+                                    isRaw = data.isRaw,
+                                    onSuccess = {
+                                        viewModel.onModeSelected(SigilMode.AUTO)
+                                    }
+                                )
+                            } else {
+                                viewModel.saveProfile(
+                                    name = data.name,
+                                    description = data.desc,
+                                    layers = uiState.customLayers.map { it.algorithm },
+                                    kdfOverride = data.kdf,
+                                    compress = uiState.isCompressionEnabled,
+                                    isRaw = true,
+                                    onSuccess = {
+                                        viewModel.onModeSelected(SigilMode.AUTO)
+                                    },
+                                    onDuplicateName = { existing ->
+                                        showOverwriteDialog = existing
+                                    }
+                                )
+                            }
+                        }
+                        showRawSecurityWarning = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Proceed (Unsafe)") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showRawSecurityWarning = false
+                    }
+                ) { Text("Cancel") }
             }
         )
     }
@@ -427,6 +540,14 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     }
 }
 
+// Data holder for pending save
+private data class PendingProfileData(
+    val name: String,
+    val desc: String,
+    val kdf: CryptoEngine.KdfConfig?,
+    val isRaw: Boolean
+)
+
 /**
  * Dialog that collects profile metadata and optional overrides used to save an encryption profile.
  *
@@ -434,7 +555,11 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
  * and an optional custom KDF section initialized from `initialKdf`. The Save button is enabled only when a
  * non-blank profile name is entered.
  *
- * @param initialKdf The initial KDF configuration used to prefill the custom KDF controls.
+ * @param initialName The starting name for the profile (e.g. when editing).
+ * @param initialDescription The starting description for the profile.
+ * @param initialKdfOverride The existing KDF override if any, to prefill the toggle and sliders.
+ * @param defaultKdf The default/global KDF config to fallback to if no override is set.
+ * @param initialIsRaw The starting raw mode state.
  * @param layerCount Number of layers in the current profile; controls whether the Raw Mode option is shown.
  * @param onDismiss Callback invoked when the user cancels or dismisses the dialog.
  * @param onSave Callback invoked when the user confirms the save. Receives the profile name, short description,
@@ -443,26 +568,32 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
  */
 @Composable
 fun SaveProfileDialog(
-    initialKdf: CryptoEngine.KdfConfig,
+    initialName: String = "",
+    initialDescription: String = "",
+    initialKdfOverride: CryptoEngine.KdfConfig?,
+    defaultKdf: CryptoEngine.KdfConfig,
+    initialIsRaw: Boolean = false,
     layerCount: Int,
     onDismiss: () -> Unit,
     onSave: (String, String, CryptoEngine.KdfConfig?, Boolean) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
+    var description by remember { mutableStateOf(initialDescription) }
 
     // KDF Override State
-    var useCustomKdf by remember { mutableStateOf(false) }
-    var kdfIter by remember { mutableFloatStateOf(initialKdf.iterations.toFloat()) }
-    var kdfMem by remember { mutableFloatStateOf(initialKdf.memoryPow2.toFloat()) }
-    var kdfPar by remember { mutableFloatStateOf(initialKdf.parallelism.toFloat()) }
+    var useCustomKdf by remember { mutableStateOf(initialKdfOverride != null) }
+    val effectiveKdf = initialKdfOverride ?: defaultKdf
+
+    var kdfIter by remember { mutableFloatStateOf(effectiveKdf.iterations.toFloat()) }
+    var kdfMem by remember { mutableFloatStateOf(effectiveKdf.memoryPow2.toFloat()) }
+    var kdfPar by remember { mutableFloatStateOf(effectiveKdf.parallelism.toFloat()) }
 
     // Raw Mode State
-    var useRawMode by remember { mutableStateOf(false) }
+    var useRawMode by remember { mutableStateOf(initialIsRaw) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save Profile") },
+        title = { Text(if (initialName.isEmpty()) "Save Profile" else "Edit Profile") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
@@ -571,7 +702,7 @@ fun SaveProfileDialog(
                     } else null
                     onSave(name, description, kdfConfig, useRawMode)
                 },
-                enabled = name.isNotBlank()
+                enabled = name.isNotBlank() && layerCount > 0
             ) { Text("Save") }
         },
         dismissButton = {
@@ -622,6 +753,7 @@ fun MovableLayerItem(
 }
 
 // Add Layer Sheet
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
@@ -630,9 +762,21 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
     val allAlgos = AlgorithmRegistry.supportedAlgorithms
     val focusManager = LocalFocusManager.current
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    val filteredAlgos = remember(searchQuery, searchDescription, allAlgos) {
+        allAlgos.filter { algo ->
+            val nameMatch = algo.name.contains(searchQuery, ignoreCase = true)
+            if (searchDescription) nameMatch || algo.description.contains(searchQuery, ignoreCase = true) else nameMatch
+        }
+    }
+
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+
+        // Header
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -652,27 +796,31 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
                     .height(32.dp)
                     .scale(scale)
             ) {
-                Text(
-                    text = "Add${if (selectedAlgos.isNotEmpty()) " (${selectedAlgos.size})" else ""}",
-                    fontSize = 13.sp
-                )
+                Text(text = "Add${if (selectedAlgos.isNotEmpty()) " (${selectedAlgos.size})" else ""}", fontSize = 13.sp)
             }
         }
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = { Text("Search (e.g. AES, Serpent)...") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
-            trailingIcon = { IconButton(onClick = { focusManager.clearFocus() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Done") } },
-            modifier = Modifier.fillMaxWidth(),
-            shape = CircleShape,
-            singleLine = true
-        )
+        // Search Bar
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search (e.g. AES, Serpent)...") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = { IconButton(onClick = { focusManager.clearFocus() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Done") } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = CircleShape,
+                singleLine = true
+            )
+        }
 
+        // Toggle
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clickable { searchDescription = !searchDescription }
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { searchDescription = !searchDescription }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Switch(checked = searchDescription, onCheckedChange = { searchDescription = it }, modifier = Modifier.scale(0.7f))
             Spacer(modifier = Modifier.width(8.dp))
@@ -682,68 +830,95 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
 
         Box(modifier = Modifier.weight(1f)) {
-            LazyColumn {
-                val filtered = allAlgos.filter { algo ->
-                    val nameMatch = algo.name.contains(searchQuery, ignoreCase = true)
-                    if (searchDescription) nameMatch || algo.description.contains(searchQuery, ignoreCase = true) else nameMatch
-                }
+            CompositionLocalProvider(
+                LocalOverscrollFactory provides null
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
+                ) {
+                    items(
+                        items = filteredAlgos,
+                        key = { it.id }
+                    ) { algoData ->
+                        val engineEnum = CryptoEngine.Algorithm.valueOf(algoData.id)
+                        val isSelected = selectedAlgos.contains(engineEnum)
+                        val isWeak = algoData.isWeak
+                        val containerColor = when {
+                            isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                            isWeak -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerLow
+                        }
 
-                items(filtered) { algoData ->
-                    val engineEnum = CryptoEngine.Algorithm.valueOf(algoData.id)
-                    val isSelected = selectedAlgos.contains(engineEnum)
-
-                    // WARNING LOGIC: Flag weak ciphers
-                    val isWeak = algoData.isWeak
-                    val containerColor = when {
-                        isSelected -> MaterialTheme.colorScheme.secondaryContainer
-                        isWeak -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
-                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                        Surface(
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = containerColor
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            algoData.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isWeak) {
+                                            Spacer(Modifier.width(8.dp))
+                                            Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                supportingContent = {
+                                    Column {
+                                        Text(algoData.description)
+                                        if (isWeak) {
+                                            Text(algoData.securityWarning ?: "Weak Cipher", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                trailingContent = {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            selectedAlgos = if (checked) selectedAlgos + engineEnum else selectedAlgos - engineEnum
+                                        }
+                                    )
+                                },
+                                modifier = Modifier.clickable {
+                                    selectedAlgos = if (isSelected) selectedAlgos - engineEnum else selectedAlgos + engineEnum
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                        }
                     }
 
-                    Surface(
-                        modifier = Modifier.padding(vertical = 4.dp).clip(RoundedCornerShape(16.dp)),
-                        color = containerColor
-                    ) {
-                        ListItem(
-                            headlineContent = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        algoData.name,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-                                    )
-                                    if (isWeak) {
-                                        Spacer(Modifier.width(8.dp))
-                                        Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            },
-                            supportingContent = {
-                                Column {
-                                    Text(algoData.description)
-                                    if (isWeak) {
-                                        Text(algoData.securityWarning ?: "Weak Cipher", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            },
-                            trailingContent = {
-                                Checkbox(
-                                    checked = isSelected,
-                                    onCheckedChange = { checked ->
-                                        selectedAlgos = if (checked) selectedAlgos + engineEnum else selectedAlgos - engineEnum
-                                    }
-                                )
-                            },
-                            modifier = Modifier.clickable {
-                                selectedAlgos = if (isSelected) selectedAlgos - engineEnum else selectedAlgos + engineEnum
-                            },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                        )
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp, bottom = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.width(40.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "END OF LIST",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
                     }
                 }
             }
         }
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

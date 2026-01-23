@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -151,7 +152,10 @@ fun SigilApp(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
-                        .clickable(enabled = false) {},
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {},
                     contentAlignment = Alignment.Center
                 ) {
                     LoadingIndicator(

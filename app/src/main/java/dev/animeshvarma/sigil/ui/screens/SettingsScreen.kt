@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
@@ -108,7 +107,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var showSecurityErrorDialog by remember { mutableStateOf(false) }
 
     // Danger Dialogs
-    var showResetProfilesDialog by remember { mutableStateOf(false) }
     var showResetSettingsDialog by remember { mutableStateOf(false) }
     var showWipeDataDialog by remember { mutableStateOf(false) }
 
@@ -387,7 +385,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             onValueChange = { graceMinutes = it },
                             onValueChangeFinished = { prefs.graceDurationMinutes = graceMinutes.toInt() },
                             valueRange = 1f..60f,
-                            steps = 59
                         )
                     }
                 }
@@ -436,19 +433,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
         // --- DATA & PROFILES ---
         SettingsHeader("Data Management")
-
-        OutlinedButton(
-            onClick = { showResetProfilesDialog = true },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
-        ) {
-            Icon(Icons.Default.Restore, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Reset Encryption Profiles")
-        }
-
-        Spacer(Modifier.height(8.dp))
 
         OutlinedButton(
             onClick = { showResetSettingsDialog = true },
@@ -623,38 +607,64 @@ fun SettingsScreen(viewModel: SigilViewModel) {
         )
     }
 
-    // CONFIRM RESET PROFILES
-    if (showResetProfilesDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetProfilesDialog = false },
-            icon = { Icon(Icons.Default.Restore, null) },
-            title = { Text("Reset Profiles") },
-            text = { Text("Delete all custom encryption profiles and restore the default list?\n\nThis cannot be undone.") },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.resetProfiles()
-                    showResetProfilesDialog = false
-                }) { Text("Reset") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetProfilesDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
     // CONFIRM RESET SETTINGS
     if (showResetSettingsDialog) {
         var shouldRestart by remember { mutableStateOf(false) }
+        var resetAll by remember { mutableStateOf(true) }
+        var resetGeneral by remember { mutableStateOf(true) }
+        var resetAppearance by remember { mutableStateOf(true) }
+        var resetKdf by remember { mutableStateOf(true) }
+        var resetProfiles by remember { mutableStateOf(true) }
 
         AlertDialog(
             onDismissRequest = { showResetSettingsDialog = false },
             icon = { Icon(Icons.Default.SettingsBackupRestore, null) },
-            title = { Text("Reset Preferences") },
+            title = { Text("Reset App Preferences") },
             text = {
                 Column {
-                    Text("Reset all application settings (Theme, Security, KDF) to defaults?\n\nThis will update the UI immediately, application of some changes will require a restart.")
-
+                    Text("Select which settings you want to restore to default values.")
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    // Reset All Checkbox
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { resetAll = !resetAll },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = resetAll,
+                            onCheckedChange = { resetAll = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reset Everything", fontWeight = FontWeight.Bold)
+                    }
+
+                    AnimatedVisibility(visible = !resetAll) {
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            // Helper composable
+                            @Composable
+                            fun ResetOption(label: String, state: Boolean, onStateChange: (Boolean) -> Unit) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onStateChange(!state) },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(checked = state, onCheckedChange = onStateChange)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+
+                            ResetOption("General, Privacy & App Lock", resetGeneral) { resetGeneral = it }
+                            ResetOption("Appearance Settings", resetAppearance) { resetAppearance = it }
+                            ResetOption("Global Encryption Defaults", resetKdf) { resetKdf = it }
+                            ResetOption("Saved Encryption Profiles", resetProfiles) { resetProfiles = it }
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
                     Row(
                         modifier = Modifier
@@ -673,31 +683,46 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             },
             confirmButton = {
                 Button(onClick = {
-                    // 1. Save defaults to SharedPreferences (and Restart if checked)
-                    viewModel.resetAppPreferences(shouldRestart)
+                    val finalGeneral = if (resetAll) true else resetGeneral
+                    val finalAppearance = if (resetAll) true else resetAppearance
+                    val finalKdf = if (resetAll) true else resetKdf
+                    val finalProfiles = if (resetAll) true else resetProfiles
 
-                    // 2. IF NOT RESTARTING, MANUALLY UPDATE UI STATE
-                    if (!shouldRestart) {
-                        onboardingToggle = true
+                    // Perform Reset via Prefs
+                    prefs.resetSettings(
+                        resetGeneral = finalGeneral,
+                        resetAppearance = finalAppearance,
+                        resetKdf = finalKdf,
+                        resetProfiles = finalProfiles,
+                        synchronous = shouldRestart
+                    )
 
-                        // Security
-                        lockMode = LockMode.NONE
-                        graceEnabled = false
-                        graceMinutes = 5f
+                    if (shouldRestart) {
+                        restartApp(context)
+                    } else {
+                        // Manually update UI state
+                        val freshPrefs = viewModel.getPrefs()
 
-                        // KDF (Defaults based on your ViewModel/Prefs)
-                        kdfIterations = 10f
-                        kdfMemory = 16f
-                        kdfParallelism = 4f
+                        if (finalGeneral) {
+                            onboardingToggle = true
+                            lockMode = freshPrefs.lockMode
+                            graceEnabled = freshPrefs.isGracePeriodEnabled
+                            graceMinutes = freshPrefs.graceDurationMinutes.toFloat()
+                            screenShield = freshPrefs.isScreenShieldEnabled
+                            clipTimeout = freshPrefs.clipboardTimeoutSeconds.toFloat()
+                        }
 
-                        // Privacy
-                        clipTimeout = 30f
-                        screenShield = true
+                        if (finalAppearance) {
+                            dynamicColors = freshPrefs.isDynamicColorsEnabled
+                            darkMode = freshPrefs.isDarkModeEnabled
+                            selectedColorInt = freshPrefs.selectedThemeColor
+                        }
 
-                        // Appearance
-                        dynamicColors = true
-                        darkMode = true
-                        selectedColorInt = android.graphics.Color.WHITE // 0xFFFFFFFF
+                        if (finalKdf) {
+                            kdfIterations = freshPrefs.kdfIterations.toFloat()
+                            kdfMemory = freshPrefs.kdfMemoryPow2.toFloat()
+                            kdfParallelism = freshPrefs.kdfParallelism.toFloat()
+                        }
                     }
 
                     showResetSettingsDialog = false

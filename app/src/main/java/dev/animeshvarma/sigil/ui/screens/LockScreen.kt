@@ -93,6 +93,12 @@ fun LockScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                if (BiometricHelper.hasBiometricChanged()) {
+                    showBiometricInvalidatedDialog = true
+                    isPinFallback = true
+                    return@LifecycleEventObserver
+                }
+
                 if (lockMode == LockMode.DEVICE &&
                     !showBiometricInvalidatedDialog &&
                     !isPinFallback
