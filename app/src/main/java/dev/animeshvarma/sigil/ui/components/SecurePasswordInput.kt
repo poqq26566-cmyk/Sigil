@@ -30,6 +30,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.animeshvarma.sigil.data.VaultEntry
 
+/**
+ * A composable password/key input with visibility toggle, integrated vault dropdown, and save/overwrite flows.
+ *
+ * Shows an outlined text field for entering a password or key, a trailing visibility toggle, and a vault menu
+ * that lets the user save the current value (with alias entry and duplicate-name handling) or fill the field
+ * from existing vault entries. When saving, the composable prompts for an alias and, if the alias already exists
+ * (case-insensitive), requests confirmation to overwrite.
+ *
+ * @param value The current text shown in the input.
+ * @param onValueChange Callback invoked when the input text changes.
+ * @param onSaveRequested Callback invoked to persist a key under the provided alias.
+ * @param vaultEntries List of vault entries displayed in the vault dropdown; entries supply alias, strengthScore, and strengthLabel.
+ * @param onEntrySelected Callback invoked when a vault entry is chosen; the selected entry should be applied by the caller.
+ * @param modifier Modifier applied to the root composable.
+ * @param forceDropdownExpanded When true, forces the vault dropdown to open (useful for guided flows or testing).
+ */
 @Composable
 fun SecurePasswordInput(
     value: String,

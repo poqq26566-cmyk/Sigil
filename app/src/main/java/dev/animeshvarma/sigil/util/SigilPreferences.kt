@@ -31,6 +31,11 @@ class SigilPreferences(context: Context) {
         private const val KEY_ACTIVE_PROFILE_ID = "active_encryption_profile_id"
     }
 
+    /**
+     * Indicates whether the onboarding flow has been completed.
+     *
+     * @return `true` if onboarding has been completed, `false` otherwise.
+     */
     fun hasCompletedOnboarding(): Boolean {
         return prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
     }
@@ -103,6 +108,16 @@ class SigilPreferences(context: Context) {
         get() = prefs.getString(KEY_ACTIVE_PROFILE_ID, null)
         set(value) = prefs.edit { putString(KEY_ACTIVE_PROFILE_ID, value) }
 
+    /**
+     * Load custom encryption profiles persisted in shared preferences.
+     *
+     * Parses the JSON array stored under KEY_SAVED_PROFILES and reconstructs each saved EncryptionProfile.
+     * Malformed entries are skipped; missing optional fields use these defaults: `description` = "Custom Profile",
+     * `compress` = true, `raw` = false. Each profile's `layers` are parsed by algorithm name and an optional
+     * `kdf` object (with `iter`, `mem`, `par`) is converted to a KdfConfig when present.
+     *
+     * @return List of reconstructed custom EncryptionProfile objects; empty if none are saved or parsing fails.
+     */
     fun getCustomProfiles(): List<EncryptionProfile> {
         val jsonString = prefs.getString(KEY_SAVED_PROFILES, "[]") ?: "[]"
         val profiles = mutableListOf<EncryptionProfile>()
@@ -156,6 +171,14 @@ class SigilPreferences(context: Context) {
         return profiles
     }
 
+    /**
+     * Serializes the provided custom encryption profiles and saves them to shared preferences.
+     *
+     * Each profile is saved as a JSON object containing `id`, `name`, `description`, `compress`, `raw`,
+     * `layers` (array of algorithm names) and an optional `kdf` object with `iter`, `mem`, and `par`.
+     *
+     * @param profiles List of profiles to persist; built-in profiles are ignored.
+     */
     fun saveCustomProfiles(profiles: List<EncryptionProfile>) {
         val jsonArray = JSONArray()
         profiles.filter { !it.isBuiltIn }.forEach { profile ->
@@ -185,6 +208,14 @@ class SigilPreferences(context: Context) {
         prefs.edit { putString(KEY_SAVED_PROFILES, jsonArray.toString()) }
     }
 
+    /**
+     * Reset all stored user preferences to their predefined defaults.
+     *
+     * This restores default values for security & general settings (lock mode, grace period, clipboard timeout, onboarding),
+     * appearance settings (dynamic colors, dark mode, theme color), and KDF parameters (iterations, memory, parallelism).
+     *
+     * @param synchronous If `true`, write the changes synchronously (commit); if `false`, schedule the write asynchronously (apply).
+     */
     fun resetAllSettings(synchronous: Boolean) {
         prefs.edit(commit = synchronous) {
             // Security & General

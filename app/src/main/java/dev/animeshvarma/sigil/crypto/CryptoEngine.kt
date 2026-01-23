@@ -80,6 +80,23 @@ object CryptoEngine {
         }
     }
 
+    /**
+     * Encrypts a byte array with a layered sequence of authenticated ciphers and returns a compact Base64 string.
+     *
+     * Applies Argon2id-based key derivation from the provided password and a random salt, optionally compresses
+     * the plaintext, encrypts the payload through the given algorithm chain (in order), stores per-layer IVs and
+     * metadata in an AES-GCM-protected header, and appends a global HMAC. The final result is Base64-encoded with
+     * padding removed.
+     *
+     * @param data Plaintext bytes to encrypt (must be ≤ 10 MB).
+     * @param password Password characters used to derive keys; the implementation clears this buffer after use.
+     * @param algorithms Ordered list of algorithms to apply as layered encryption (default: AES_GCM).
+     * @param kdfConfig Argon2id parameters (iterations, memoryPow2, parallelism) used for key derivation.
+     * @param compress If true, compresses the plaintext before encryption.
+     * @param logCallback Optional callback that receives progress, warning, and timing messages.
+     * @return A Base64-encoded string (padding stripped) containing salt, encrypted header, ciphertext, and HMAC.
+     * @throws IllegalArgumentException If input, intermediate pack, or final output sizes exceed configured safety limits.
+     */
     fun encrypt(
         data: ByteArray,
         password: CharArray,
@@ -179,7 +196,22 @@ object CryptoEngine {
         return stripPadding(encoder.encodeToString(finalBytes))
     }
 
-    // --- MAIN CHAIN DECRYPTION ---
+    /**
+     * Decrypts a secure container produced by this engine and returns the original plaintext bytes.
+     *
+     * Performs Argon2id key derivation using the provided password and kdfConfig, verifies a global
+     * HMAC to ensure integrity, decrypts the layered cipher sequence stored in the container, and
+     * optionally decompresses the final payload when indicated by the metadata. Sensitive keying
+     * material derived during the operation is cleared from memory before returning.
+     *
+     * @param encryptedData Base64-encoded container string produced by the corresponding encrypt routine.
+     * @param password The password as a mutable CharArray; contents are zeroed after use.
+     * @param kdfConfig Argon2id parameter set used to reconstruct key material.
+     * @return The decrypted plaintext bytes.
+     * @throws IllegalArgumentException If decryption fails for any reason (integrity check, malformed
+     *     input, wrong password, or other errors). The exception message is intentionally generic to
+     *     avoid leaking sensitive information.
+     */
     fun decrypt(
         encryptedData: String,
         password: CharArray,
@@ -286,7 +318,20 @@ object CryptoEngine {
         }
     }
 
-    // --- RAW / STANDALONE MODE ---
+    /**
+     * Encrypts a single byte payload with the specified algorithm and returns a compact raw container.
+     *
+     * The returned container is Base64-encoded and contains, in order: 16-byte salt, IV (algorithm-dependent size),
+     * and the ciphertext produced by the chosen algorithm.
+     *
+     * @param data Plaintext bytes to encrypt (must be <= 10MB).
+     * @param password Password as a CharArray; its UTF-8 bytes are derived and cleared after use.
+     * @param algorithm Cipher algorithm to use for encryption and IV/key sizing.
+     * @param kdfConfig Argon2id parameters used to derive the encryption key.
+     * @param logCallback Optional callback receiving progress/log messages.
+     * @return A Base64-encoded string containing salt || iv || ciphertext.
+     * @throws IllegalArgumentException If `data` exceeds the 10MB safety limit.
+     */
     fun encryptRaw(
         data: ByteArray,
         password: CharArray,
@@ -330,6 +375,17 @@ object CryptoEngine {
         return encoder.encodeToString(output)
     }
 
+    /**
+     * Decrypts a standalone raw container produced by encryptRaw.
+     *
+     * @param encryptedData Base64-encoded container string (whitespace allowed) containing salt, IV, and ciphertext.
+     * @param password Password as a CharArray used to derive the decryption key; the function clears this input internally.
+     * @param algorithm The Algorithm that was used to encrypt the container.
+     * @param kdfConfig Argon2id parameters used for key derivation.
+     * @param logCallback Optional logging function that receives progress messages.
+     * @return The decrypted plaintext bytes.
+     * @throws IllegalArgumentException If decoding, key derivation, or decryption fails (e.g., wrong password/profile or data corruption).
+     */
     fun decryptRaw(
         encryptedData: String,
         password: CharArray,
@@ -373,7 +429,15 @@ object CryptoEngine {
         }
     }
 
-    // --- SECURE HELPERS ---
+    /**
+     * Derives a 32-byte Argon2id hash from a PIN and salt.
+     *
+     * The function uses fixed Argon2id parameters to produce a 32-byte key from the provided PIN and salt.
+     *
+     * @param pin The PIN to hash; the function will clear the PIN contents after use.
+     * @param salt The salt bytes to use for derivation.
+     * @return A 32-byte derived hash.
+     */
     fun hashPin(pin: CharArray, salt: ByteArray): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
@@ -443,8 +507,31 @@ object CryptoEngine {
         return outputStream.toByteArray()
     }
 
-    private fun stripPadding(i: String) = i.trimEnd('=')
-    private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
+    /**
+ * Removes Base64 padding characters from the end of a string.
+ *
+ * @param i The input string (typically Base64-encoded) from which trailing `=` characters should be removed.
+ * @return The input string with all trailing `=` characters removed.
+ */
+private fun stripPadding(i: String) = i.trimEnd('=')
+    /**
+ * Restores Base64 padding so the input's length becomes a multiple of four.
+ *
+ * @param i A Base64-encoded string that may have had trailing '=' padding removed.
+ * @return The input string with '=' characters appended as needed to reach a length divisible by 4.
+ */
+private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
+    /**
+     * Derives a fixed-length key from password bytes and a salt using Argon2id with the provided KDF parameters.
+     *
+     * Uses Argon2id (version 1.3) and the iterations, memory, and parallelism from [config] to produce a key of the requested length.
+     *
+     * @param p Password-derived input bytes (will be used as Argon2 input).
+     * @param s Salt bytes to use for derivation.
+     * @param config Argon2id parameter set (iterations, memoryPow2, parallelism).
+     * @param length Desired length of the derived key in bytes.
+     * @return A byte array of size `length` containing the derived key.
+     */
     private fun deriveKeyArgon2(p: ByteArray, s: ByteArray, config: KdfConfig, length: Int): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)

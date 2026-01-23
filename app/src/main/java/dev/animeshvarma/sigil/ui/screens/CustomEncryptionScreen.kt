@@ -62,6 +62,18 @@ import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Composable screen for configuring a custom cipher cascade, entering input and password, performing encrypt/decrypt actions,
+ * and managing save/overwrite profile flows.
+ *
+ * The UI exposes controls for toggling compression, reordering/removing encryption layers, adding layers via a bottom sheet,
+ * editing input and password (with vault integration), triggering encryption/decryption, and viewing/sharing/copying output.
+ * It also presents a Save Profile dialog (including optional KDF override and raw mode) and an overwrite confirmation dialog
+ * when a profile name already exists.
+ *
+ * @param viewModel The SigilViewModel providing state, actions, and persistence APIs used by the screen.
+ * @param uiState Current UiState containing layers, input/password/output text, compression flag, and editing profile id.
+ */
 @Suppress("AssignedValueIsNeverRead")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -415,6 +427,20 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     }
 }
 
+/**
+ * Dialog that collects profile metadata and optional overrides used to save an encryption profile.
+ *
+ * Displays fields for profile name and description, an optional Raw Mode toggle (shown when `layerCount == 1`),
+ * and an optional custom KDF section initialized from `initialKdf`. The Save button is enabled only when a
+ * non-blank profile name is entered.
+ *
+ * @param initialKdf The initial KDF configuration used to prefill the custom KDF controls.
+ * @param layerCount Number of layers in the current profile; controls whether the Raw Mode option is shown.
+ * @param onDismiss Callback invoked when the user cancels or dismisses the dialog.
+ * @param onSave Callback invoked when the user confirms the save. Receives the profile name, short description,
+ *               an optional `CryptoEngine.KdfConfig` (null when KDF override is not used), and a Boolean indicating
+ *               whether Raw Mode is enabled.
+ */
 @Composable
 fun SaveProfileDialog(
     initialKdf: CryptoEngine.KdfConfig,

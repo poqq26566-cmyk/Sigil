@@ -35,6 +35,16 @@ class MainActivity : AppCompatActivity() {
 
     private val isContentHidden = mutableStateOf(true)
 
+    /**
+     * Initializes the activity UI, security, lifecycle observers, onboarding state, intent handling, and Compose content.
+     *
+     * Sets up edge-to-edge rendering, view model, preferences, and lock manager; applies screen security flags; initializes
+     * the content-hidden state from the lock manager; registers a lifecycle observer to hide content on pause, record
+     * background events and clear sensitive data on stop (when configured), and re-evaluate secure flag and content visibility
+     * on start. Checks and processes incoming share intents, determines whether onboarding should be shown, and composes
+     * the app UI: shows a lock screen when content is hidden and locking is enabled, otherwise displays the main app with
+     * theming and onboarding orchestration.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -127,12 +137,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Handle a newly delivered intent, update the activity's current intent, and process any shared content it carries.
+     *
+     * @param intent The new Intent delivered to the activity.
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         checkAndProcessIntent(intent, viewModel)
     }
 
+    /**
+     * Ensures sensitive in-memory data is cleared when saving instance state if a lock mode is enabled.
+     *
+     * @param outState Bundle in which to place saved state.
+     */
     override fun onSaveInstanceState(outState: Bundle) {
         if (prefs.lockMode != LockMode.NONE) {
             viewModel.clearSensitiveData()
@@ -140,6 +160,14 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    /**
+     * Processes an incoming ACTION_SEND "text/plain" intent by either handling its shared text immediately or caching it for later.
+     *
+     * If the intent contains EXTRA_TEXT, the extra is removed from the intent. If the app content is currently hidden or a lock mode is enabled, the shared text is cached via the view model and the content is marked hidden; otherwise the shared text is delivered to the view model for immediate handling. Non-matching or null intents are ignored.
+     *
+     * @param intent The incoming intent that may contain shared text (may be null).
+     * @param viewModel The view model used to handle or cache the shared text.
+     */
     private fun checkAndProcessIntent(intent: Intent?, viewModel: SigilViewModel) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
