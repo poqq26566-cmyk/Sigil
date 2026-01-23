@@ -55,6 +55,21 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.system.exitProcess
 
+/**
+ * Renders the app Settings screen with controls for general options, encryption parameters, privacy, app lock, appearance, and data management.
+ *
+ * Displays interactive sections and dialogs for:
+ * - General (onboarding reset, restart),
+ * - Encryption Parameters (Argon2 settings),
+ * - Privacy & Clipboard (screen shield, clipboard auto-wipe),
+ * - App Lock (PIN/biometrics, grace period, PIN management),
+ * - Appearance (dynamic colors, accent color, dark mode),
+ * - Data Management (reset profiles, reset preferences, wipe all data).
+ *
+ * The UI synchronizes local state with the provided ViewModel and persists preference changes via the ViewModel/prefs. Dialogs handle PIN setup/verification, color selection, and confirmations for destructive actions.
+ *
+ * @param viewModel The SigilViewModel that provides preferences, performs preference updates, and exposes actions such as resetting profiles, resetting preferences, setting/wiping PINs, and wiping all data.
+ */
 @Composable
 fun SettingsScreen(viewModel: SigilViewModel) {
     val context = LocalContext.current
@@ -714,6 +729,14 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     }
 }
 
+/**
+ * Displays a styled section header for settings screens.
+ *
+ * Renders the provided text using the theme's `labelLarge` typography and primary color,
+ * with leading and bottom padding to align with other settings content.
+ *
+ * @param text The header text to display.
+ */
 @Composable
 fun SettingsHeader(text: String) {
     Text(
@@ -749,6 +772,18 @@ fun RowScope.RGBField(label: String, value: String, onValueChange: (String) -> U
     )
 }
 
+/**
+ * Shows a dialog that lets the user pick an accent color using an HSV color wheel, a brightness slider,
+ * a 6-digit HEX input, or individual R/G/B inputs.
+ *
+ * The dialog initializes to `initialColor`. User interactions update an internal selected color;
+ * tapping "Apply" invokes `onColorSelected` with the current selection, and dismissing the dialog
+ * invokes `onDismiss`.
+ *
+ * @param initialColor The starting color shown when the dialog opens.
+ * @param onDismiss Called when the dialog is dismissed or the "Cancel" button is pressed.
+ * @param onColorSelected Called with the selected Color when the user confirms ("Apply").
+ */
 @Composable
 fun AdvancedColorPickerDialog(
     initialColor: Color,

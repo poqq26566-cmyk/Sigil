@@ -50,6 +50,17 @@ import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.ui.components.SecurePasswordInput
 import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
 
+/**
+ * Renders the encryption screen UI including input, secure password entry, encrypt/decrypt controls,
+ * output with share/copy actions, and a bottom sheet for selecting, creating, editing, or deleting
+ * encryption profiles.
+ *
+ * The sheet automatically closes when the lifecycle is paused. Profile actions delegate to the
+ * provided ViewModel and display short toasts for feedback.
+ *
+ * @param viewModel ViewModel that manages state and handles user actions (vault, profile management, encryption, logging, clipboard).
+ * @param uiState Current UI state used to populate fields, available profiles, and active profile information.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
@@ -256,6 +267,19 @@ fun EncryptionInterface(viewModel: SigilViewModel, uiState: UiState) {
     }
 }
 
+/**
+ * Renders an expandable card for an encryption profile that shows name, badges, algorithm chain,
+ * active state, and provides actions to select, edit, delete, and view per-algorithm details.
+ *
+ * The card toggles between a compact header and expanded details, highlights the active profile,
+ * displays warnings for weak algorithms, and shows an algorithm info dialog when an algorithm chip is tapped.
+ *
+ * @param profile The EncryptionProfile to display.
+ * @param isActive Whether this profile is currently active; affects visual emphasis and the action shown.
+ * @param onSelect Callback invoked with the profile when the user chooses to use this profile.
+ * @param onEdit Callback invoked with the profile when the user requests to edit it.
+ * @param onDelete Callback invoked with the profile when the user requests to delete it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExpandableProfileCard(
@@ -482,6 +506,15 @@ fun ExpandableProfileCard(
     }
 }
 
+/**
+ * Renders a small rounded badge with bold text for status indicators.
+ *
+ * The badge uses a low-opacity background derived from [color] and applies compact padding
+ * and a 10sp bold text style.
+ *
+ * @param text The badge label to display.
+ * @param color The foreground color for the text and base for the badge background (background uses `color` at 10% alpha).
+ */
 @Composable
 fun BadgeText(text: String, color: Color = MaterialTheme.colorScheme.primary) {
     Text(

@@ -35,6 +35,20 @@ import dev.animeshvarma.sigil.ui.screens.SteganographyScreen
 import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.launch
 
+/**
+ * Hosts the app's top-level UI, wiring SigilViewModel state to the navigation drawer, header,
+ * screen content, loading overlay, and logs dialog.
+ *
+ * Observes `viewModel.uiState` and:
+ * - Renders a ModalNavigationDrawer whose content and open/close state reflect UI state.
+ * - Shows a centered header with a menu button that opens the drawer.
+ * - Switches main content between app screens with an animated transition.
+ * - Overlays a non-interactive loading scrim while a loading flag is set.
+ * - Displays an in-app logs dialog when requested.
+ *
+ * @param modifier Modifier applied to the root container.
+ * @param viewModel ViewModel that provides UI state and handles navigation and actions. 
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SigilApp(
