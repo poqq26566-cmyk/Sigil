@@ -1,11 +1,11 @@
 package dev.animeshvarma.sigil
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.ClipDescription
 import android.os.Build
 import android.os.PersistableBundle
 import android.widget.Toast
@@ -19,8 +19,10 @@ import dev.animeshvarma.sigil.data.KeystoreRepository
 import dev.animeshvarma.sigil.data.LockManager
 import dev.animeshvarma.sigil.data.VaultEntry
 import dev.animeshvarma.sigil.model.AppScreen
+import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LayerEntry
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.ProfileRegistry
 import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
 import dev.animeshvarma.sigil.util.SecureMemory
@@ -36,6 +38,7 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlin.system.exitProcess
 
 class SigilViewModel(application: Application) : AndroidViewModel(application) {
@@ -54,14 +57,249 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pendingSharedText: String? = null
 
+    private var currentViewModelToast: Toast? = null
+
     init {
         viewModelScope.launch(Dispatchers.IO) {
             refreshVault()
+            loadProfiles()
         }
     }
 
-    // --- HELPER: KDF CONFIG INJECTION ---
-    private fun getUserKdfConfig(): CryptoEngine.KdfConfig {
+    /**
+     * Displays a short Android Toast on the main thread, cancelling any previously shown toast.
+     *
+     * @param message The text to display in the toast.
+     */
+    private fun showBackgroundToast(message: String) {
+        viewModelScope.launch(Dispatchers.Main) {
+            currentViewModelToast?.cancel()
+            val toast = Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT)
+            currentViewModelToast = toast
+            toast.show()
+        }
+    }
+
+    /**
+     * Loads custom profiles from preferences, combines them with built-in profiles, selects the active profile
+     * (falling back to the default if the saved id is missing), and updates the UI state with the available and active profiles.
+     */
+
+    private fun loadProfiles() {
+        val customProfiles = prefs.getCustomProfiles()
+        val allProfiles = ProfileRegistry.builtInProfiles + customProfiles
+
+        val savedId = prefs.activeProfileId
+        val active = allProfiles.find { it.id == savedId } ?: ProfileRegistry.defaultProfile
+
+        _uiState.update {
+            it.copy(
+                availableProfiles = allProfiles,
+                activeProfile = active
+            )
+        }
+    }
+
+    /**
+     * Sets the given encryption profile as the application's active profile.
+     *
+     * Updates the persistent active profile preference, updates the UI state to reflect the selection,
+     * and records the profile switch in the view model logs.
+     *
+     * @param profile The EncryptionProfile to select as active.
+     */
+    fun selectProfile(profile: EncryptionProfile) {
+        prefs.activeProfileId = profile.id
+        _uiState.update { it.copy(activeProfile = profile) }
+        addLog("Profile Switched: ${profile.name}")
+    }
+
+    /**
+     * Creates and persists a new custom encryption profile, then activates it.
+     *
+     * Validates that `name` is not blank and `layers` is not empty; if a profile with the same
+     * name (case-insensitive) already exists, the `onDuplicateName` callback is invoked instead.
+     *
+     * @param name The display name for the new profile.
+     * @param description Optional human-readable description for the profile.
+     * @param layers Ordered list of algorithms that form the encryption chain for this profile.
+     * @param kdfOverride Optional KDF configuration to use for this profile instead of the global KDF settings.
+     * @param compress Whether compression should be enabled when using this profile.
+     * @param isRaw If true, indicates the profile represents a raw single-layer mode rather than a container chain.
+     * @param onSuccess Callback invoked after the profile is saved and selected as the active profile.
+     * @param onDuplicateName Callback invoked with the existing conflicting profile when a duplicate name is detected.
+     */
+    fun saveProfile(
+        name: String,
+        description: String,
+        layers: List<CryptoEngine.Algorithm>,
+        kdfOverride: CryptoEngine.KdfConfig?,
+        compress: Boolean,
+        isRaw: Boolean,
+        onSuccess: () -> Unit,
+        onDuplicateName: (EncryptionProfile) -> Unit
+    ) {
+        if (name.isBlank()) {
+            addLog("Error: Profile name required.")
+            return
+        }
+        if (layers.isEmpty()) {
+            addLog("Error: Cannot save empty chain.")
+            return
+        }
+
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+
+        // Check for Name Duplication
+        val duplicate = currentCustom.find { it.name.equals(name, ignoreCase = true) }
+        if (duplicate != null) {
+            onDuplicateName(duplicate)
+            return
+        }
+
+        val newProfile = EncryptionProfile(
+            id = UUID.randomUUID().toString(),
+            name = name,
+            description = description,
+            layers = layers,
+            kdfConfig = kdfOverride,
+            isCompressionEnabled = compress,
+            isBuiltIn = false,
+            isRaw = isRaw
+        )
+
+        currentCustom.add(newProfile)
+        prefs.saveCustomProfiles(currentCustom)
+        loadProfiles()
+        selectProfile(newProfile)
+        onSuccess()
+        addLog("Profile Saved: $name")
+    }
+
+    /**
+     * Updates an existing custom profile by ID with new configuration.
+     *
+     * @param id The ID of the profile to update.
+     * @param name The new display name.
+     * @param description The new description.
+     * @param layers The new list of algorithms.
+     * @param kdfOverride The new KDF configuration override (or null).
+     * @param compress Whether compression is enabled.
+     * @param isRaw Whether raw mode is enabled.
+     * @param onSuccess Callback invoked after successful update.
+     */
+    fun updateExistingProfile(
+        id: String,
+        name: String,
+        description: String,
+        layers: List<CryptoEngine.Algorithm>,
+        kdfOverride: CryptoEngine.KdfConfig?,
+        compress: Boolean,
+        isRaw: Boolean,
+        onSuccess: () -> Unit
+    ) {
+        if (name.isBlank()) {
+            addLog("Error: Profile name required.")
+            return
+        }
+        if (layers.isEmpty()) {
+            addLog("Error: Cannot save empty chain.")
+            return
+        }
+
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        val index = currentCustom.indexOfFirst { it.id == id }
+
+        if (index != -1) {
+            // Check if name is taken by ANOTHER profile
+            val collision = currentCustom.any { it.id != id && it.name.equals(name, ignoreCase = true) }
+            if (collision) {
+                addLog("Error: Profile name '$name' is already taken.")
+                return
+            }
+
+            val updated = currentCustom[index].copy(
+                name = name,
+                description = description,
+                layers = layers,
+                kdfConfig = kdfOverride,
+                isCompressionEnabled = compress,
+                isRaw = isRaw
+            )
+            currentCustom[index] = updated
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            selectProfile(updated)
+            onSuccess()
+            addLog("Profile Updated: $name")
+        } else {
+            addLog("Error: Profile not found for update.")
+        }
+    }
+
+    /**
+     * Replaces an existing custom encryption profile with the provided profile (matched by name, case-insensitive) and applies it as active.
+     *
+     * If a custom profile with the same name exists, this updates the stored custom profiles, reloads available profiles, selects the updated profile, and records a log entry.
+     *
+     * @param profile The encryption profile to save in place of an existing custom profile with the same name.
+     */
+    fun overwriteProfile(profile: EncryptionProfile) {
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        val index = currentCustom.indexOfFirst { it.name.equals(profile.name, ignoreCase = true) }
+        if (index != -1) {
+            currentCustom[index] = profile
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            selectProfile(profile)
+            addLog("Profile Updated: ${profile.name}")
+        }
+    }
+
+    /**
+     * Deletes a custom encryption profile identified by `profileId`.
+     *
+     * If a matching custom profile exists it is removed from stored custom profiles, the profiles are reloaded,
+     * and the default profile is selected if the deleted profile was active. Also records a log entry when deletion occurs.
+     *
+     * @param profileId The identifier of the custom profile to delete.
+     */
+    fun deleteProfile(profileId: String) {
+        val currentCustom = prefs.getCustomProfiles().toMutableList()
+        if (currentCustom.removeIf { it.id == profileId }) {
+            prefs.saveCustomProfiles(currentCustom)
+            loadProfiles()
+            // Fallback to default if deleted was active
+            if (_uiState.value.activeProfile.id == profileId) {
+                selectProfile(ProfileRegistry.defaultProfile)
+            }
+            addLog("Profile Deleted.")
+        }
+    }
+
+    /**
+     * Retrieve an encryption profile by its identifier.
+     *
+     * @param id The profile identifier to look up.
+     * @return The matching `EncryptionProfile` if found, `null` otherwise.
+     */
+    fun getProfileById(id: String): EncryptionProfile? {
+        return _uiState.value.availableProfiles.find { it.id == id }
+    }
+
+    /**
+     * Returns the effective KDF configuration: prefer an active profile's override when in AUTO mode, otherwise use global preferences.
+     *
+     * @return The `CryptoEngine.KdfConfig` from the active profile if available in AUTO mode; otherwise a config built from stored preferences (`prefs.kdfIterations`, `prefs.kdfMemoryPow2`, `prefs.kdfParallelism`).
+     */
+    private fun getActiveKdfConfig(): CryptoEngine.KdfConfig {
+        // 1. Check if ACTIVE PROFILE has an override
+        if (_uiState.value.selectedMode == SigilMode.AUTO) {
+            val profileKdf = _uiState.value.activeProfile.kdfConfig
+            if (profileKdf != null) return profileKdf
+        }
+
+        // 2. Fallback to Global Settings
         return CryptoEngine.KdfConfig(
             iterations = prefs.kdfIterations,
             memoryPow2 = prefs.kdfMemoryPow2,
@@ -100,11 +338,48 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- NAVIGATION ---
+    /**
+     * Selects the active encryption mode and updates the UI state.
+     *
+     * When switching to SigilMode.CUSTOM, clears the current editing profile ID so no profile is considered
+     * being edited.
+     *
+     * @param mode The SigilMode to select; if `SigilMode.CUSTOM`, the editing profile ID is cleared.
+     */
     fun onModeSelected(mode: SigilMode) {
-        _uiState.update { it.copy(selectedMode = mode) }
+        _uiState.update {
+            it.copy(
+                selectedMode = mode,
+                editingProfileId = if (mode == SigilMode.CUSTOM) null else it.editingProfileId
+            )
+        }
     }
 
+    /**
+     * Load the given encryption profile into the custom editor and switch the UI to custom mode.
+     *
+     * Populates the custom layer list, applies the profile's compression setting, marks the profile as
+     * being edited, and records the action in the logs.
+     *
+     * @param profile The EncryptionProfile to load into the custom editor.
+     */
+    fun loadProfileToCustomMode(profile: EncryptionProfile) {
+        _uiState.update {
+            it.copy(
+                customLayers = profile.layers.map { algo -> LayerEntry(algorithm = algo) },
+                isCompressionEnabled = profile.isCompressionEnabled,
+                editingProfileId = profile.id,
+                selectedMode = SigilMode.CUSTOM
+            )
+        }
+        addLog("Editing Profile: '${profile.name}'")
+    }
+
+    /**
+     * Sets the active application screen in the view model's UI state.
+     *
+     * @param screen The screen to set as the current view.
+     */
     fun onScreenSelected(screen: AppScreen) {
         _uiState.update { it.copy(currentScreen = screen) }
     }
@@ -177,11 +452,14 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- CRYPTO OPERATIONS ---
+    /**
+     * Encrypts the current input using the selected mode and updates the UI state with the resulting output.
+     *
+     * If the selected mode is AUTO and the active profile is marked RAW, performs a single-layer raw encryption using that profile's algorithm; otherwise builds and encrypts a Sigil container using the active profile's layers (AUTO) or the user-defined layers (CUSTOM). Requires a non-empty password; if the password is empty the operation is aborted and a log entry is added. While running, sets the view model loading flag and clears the password fields from the UI state. On completion or failure updates the appropriate output field and clears the loading flag, logs progress and errors, and securely wipes password memory.
+     */
     fun onEncrypt() {
         val state = _uiState.value
-        val pwdString =
-            if (state.selectedMode == SigilMode.AUTO) state.autoPassword else state.customPassword
+        val pwdString = if (state.selectedMode == SigilMode.AUTO) state.autoPassword else state.customPassword
         val input = if (state.selectedMode == SigilMode.AUTO) state.autoInput else state.customInput
 
         if (pwdString.isEmpty()) {
@@ -192,7 +470,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         // TRIGGER LOADING
         _uiState.update { it.copy(isLoading = true) }
 
-        // AGGRESSIVE WIPE: Clear password from UI immediately so it doesn't linger in View State
+        // Wipe password from UI state
         _uiState.update {
             if (it.selectedMode == SigilMode.AUTO) it.copy(autoPassword = "")
             else it.copy(customPassword = "")
@@ -203,40 +481,52 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val pwdChars = pwdString.toCharArray()
             try {
-                val chain: List<CryptoEngine.Algorithm>
-                val compress: Boolean
+                val result: String
+                val kdfConfig = getActiveKdfConfig()
 
-                if (state.selectedMode == SigilMode.AUTO) {
-                    chain = listOf(
-                        CryptoEngine.Algorithm.AES_GCM,
-                        CryptoEngine.Algorithm.CHACHA20_POLY1305,
-                        CryptoEngine.Algorithm.TWOFISH_CBC,
-                        CryptoEngine.Algorithm.SERPENT_CBC
-                    ).shuffled()
+                // CHECK FOR RAW PROFILE IN AUTO MODE
+                if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
+                    val profile = state.activeProfile
+                    // Raw mode assumes valid profile construction (single layer)
+                    val algo = profile.layers.firstOrNull() ?: CryptoEngine.Algorithm.AES_GCM
 
-                    compress = true
-                    addLog("Auto Mode: 4-Layer Hybrid Chain (AES+ChaCha+Twofish+Serpent).")
+                    addLog("Mode: Raw (${algo.name}).")
+                    result = CryptoEngine.encryptRaw(
+                        data = input.toByteArray(StandardCharsets.UTF_8),
+                        password = pwdChars,
+                        algorithm = algo,
+                        kdfConfig = kdfConfig,
+                        logCallback = { addLog(it) }
+                    )
                 } else {
-                    chain = state.customLayers.map { it.algorithm }
-                    compress = state.isCompressionEnabled
+                    // SIGIL CONTAINER (Auto or Custom)
+                    val chain: List<CryptoEngine.Algorithm>
+                    val compress: Boolean
+
+                    if (state.selectedMode == SigilMode.AUTO) {
+                        val profile = state.activeProfile
+                        chain = profile.layers
+                        compress = profile.isCompressionEnabled
+                        addLog("Using Profile: ${profile.name}")
+                    } else {
+                        chain = state.customLayers.map { it.algorithm }
+                        compress = state.isCompressionEnabled
+                    }
+
+                    if (chain.isEmpty()) throw IllegalStateException("No encryption layers selected.")
+
+                    result = CryptoEngine.encrypt(
+                        data = input.toByteArray(StandardCharsets.UTF_8),
+                        password = pwdChars,
+                        algorithms = chain,
+                        kdfConfig = kdfConfig,
+                        compress = compress,
+                        logCallback = { addLog(it) }
+                    )
                 }
 
-                if (chain.isEmpty()) throw Exception("No encryption layers selected.")
-
-                val result = CryptoEngine.encrypt(
-                    data = input.toByteArray(StandardCharsets.UTF_8),
-                    password = pwdChars,
-                    algorithms = chain,
-                    kdfConfig = getUserKdfConfig(),
-                    compress = compress,
-                    logCallback = { addLog(it) }
-                )
-
                 _uiState.update {
-                    if (it.selectedMode == SigilMode.AUTO) it.copy(
-                        autoOutput = result,
-                        isLoading = false
-                    )
+                    if (it.selectedMode == SigilMode.AUTO) it.copy(autoOutput = result, isLoading = false)
                     else it.copy(customOutput = result, isLoading = false)
                 }
             } catch (_: Exception) {
@@ -248,10 +538,21 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Performs decryption of the currently selected input using the active profile and KDF settings.
+     *
+     * If no password or input is present, the method logs a message and returns without changing state.
+     * The UI loading state is set while decryption runs; the password is cleared from UI state immediately.
+     * Decryption runs on a background IO coroutine and:
+     * - Uses raw decryption when the active profile is marked `isRaw`, otherwise treats input as a Sigil container.
+     * - Writes the decrypted UTF-8 string to the appropriate output field (autoOutput or customOutput) and clears the loading flag on success.
+     * - On failure, writes a contextual, user-facing error message to the output and clears the loading flag.
+     *
+     * Sensitive data (password characters and decrypted bytes) is wiped from memory after use. Activity and errors are recorded via the view model's logging facility.
+     */
     fun onDecrypt() {
         val state = _uiState.value
-        val pwdString =
-            if (state.selectedMode == SigilMode.AUTO) state.autoPassword else state.customPassword
+        val pwdString = if (state.selectedMode == SigilMode.AUTO) state.autoPassword else state.customPassword
         val input = if (state.selectedMode == SigilMode.AUTO) state.autoInput else state.customInput
 
         if (pwdString.isEmpty()) {
@@ -265,7 +566,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
         _uiState.update { it.copy(isLoading = true) }
 
-        // AGGRESSIVE WIPE: Clear password from UI immediately
+        // Wipe password from UI state
         _uiState.update {
             if (it.selectedMode == SigilMode.AUTO) it.copy(autoPassword = "")
             else it.copy(customPassword = "")
@@ -276,12 +577,31 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val pwdChars = pwdString.toCharArray()
             try {
-                val decryptedBytes = CryptoEngine.decrypt(
-                    encryptedData = input,
-                    password = pwdChars,
-                    kdfConfig = getUserKdfConfig(),
-                    logCallback = { addLog(it) }
-                )
+                val kdfConfig = getActiveKdfConfig()
+                val decryptedBytes: ByteArray
+
+                // CHECK FOR RAW PROFILE
+                if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
+                    val profile = state.activeProfile
+                    val algo = profile.layers.firstOrNull() ?: CryptoEngine.Algorithm.AES_GCM
+
+                    addLog("Mode: Raw Decryption (${algo.name}). Expecting raw container.")
+                    decryptedBytes = CryptoEngine.decryptRaw(
+                        encryptedData = input,
+                        password = pwdChars,
+                        algorithm = algo,
+                        kdfConfig = kdfConfig,
+                        logCallback = { addLog(it) }
+                    )
+                } else {
+                    // SIGIL CONTAINER
+                    decryptedBytes = CryptoEngine.decrypt(
+                        encryptedData = input,
+                        password = pwdChars,
+                        kdfConfig = kdfConfig,
+                        logCallback = { addLog(it) }
+                    )
+                }
 
                 val decryptedString = String(decryptedBytes, StandardCharsets.UTF_8)
                 SecureMemory.wipe(decryptedBytes)
@@ -296,12 +616,19 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
             } catch (_: Exception) {
                 val errorReport = StringBuilder()
-                errorReport.append("DECRYPTION FAILED\n\n")
-                errorReport.append("POSSIBLE CAUSES:\n")
-                errorReport.append("1. Wrong password.\n")
-                errorReport.append("2. Corrupted data.\n")
-                errorReport.append("3. Different Security Settings.\n")
-                errorReport.append("4. Legacy format (Sigil version < v0.4.5).\n")
+                if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
+                    errorReport.append("Raw Decryption Failed\n")
+                    errorReport.append("--------------------------\n")
+                    errorReport.append("Integrity validation is disabled in Raw mode. Please manually ensure the password, profile, and data are correct.")
+                } else {
+                    errorReport.append("Decryption Failed\n")
+                    errorReport.append("--------------------------\n")
+                    errorReport.append("The system could not decrypt the data. Please verify the following:\n")
+                    errorReport.append(" • Credentials: Is the password/key correct?\n")
+                    errorReport.append(" • Integrity: The data may be corrupted or truncated.\n")
+                    errorReport.append(" • Security Parameters: Check KDF iterations and memory limits.\n")
+                    errorReport.append(" • Profile Context: Ensure you are using the correct profile.\n")
+                }
 
                 val finalMessage = errorReport.toString()
 
@@ -313,7 +640,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     else it.copy(customOutput = finalMessage, isLoading = false)
                 }
 
-                addLog("Decryption Failed: Integrity check or Password mismatch.")
+                addLog("Decryption Failed.")
             } finally {
                 SecureMemory.wipe(pwdChars)
             }
@@ -387,6 +714,15 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Loads the secret associated with a vault entry alias and delivers it to the caller.
+     *
+     * Updates the UI loading state while the vault is accessed and invokes `onResult` on the main thread
+     * with the secret value or `null` if the entry is not found.
+     *
+     * @param alias The vault entry alias to load.
+     * @param onResult Callback invoked with the secret value for `alias`, or `null` if unavailable.
+     */
     fun viewKey(alias: String, onResult: (String?) -> Unit) {
         _uiState.update { it.copy(isLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -398,7 +734,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-// --- DEMO / ONBOARDING CONTROL ---
+    // --- DEMO / ONBOARDING CONTROL ---
     // 1. Control the Docs Tab programmatically
     private val _demoDocsTabIndex = MutableStateFlow(0)
     val demoDocsTabIndex: StateFlow<Int> = _demoDocsTabIndex
@@ -507,6 +843,14 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
+    /**
+     * Performs a full application data wipe and restarts the app.
+     *
+     * Deletes the app's shared preferences, removes entries from the Android Keystore,
+     * and deletes internal cache and files. After cleanup the app is restarted and the
+     * current process is terminated. Internal errors during wipe operations are caught
+     * and do not prevent the restart.
+     */
     fun wipeAllData() {
         // TRIGGER LOADING STATE
         _uiState.update { it.copy(isLoading = true) }
@@ -559,8 +903,25 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Toggle use of dynamic system-derived colors for the app theme.
+     *
+     * @param enabled `true` to enable dynamic colors (use system-derived palette), `false` to disable them (use app-defined colors).
+     */
     fun setDynamicColors(enabled: Boolean) { prefs.isDynamicColorsEnabled = enabled }
+    /**
+     * Sets whether the app should use dark theme.
+     *
+     * @param enabled `true` to enable dark mode, `false` to disable it.
+     */
     fun setDarkMode(enabled: Boolean) { prefs.isDarkModeEnabled = enabled }
+    /**
+     * Updates the application's selected theme color and persists it in preferences.
+     *
+     * The color is stored as an ARGB integer in persistent settings.
+     *
+     * @param color The new theme color to apply and save.
+     */
     fun setThemeColor(color: Color) {
         prefs.selectedThemeColor = color.toArgb()
     }
@@ -571,7 +932,18 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         return lockManager.hasPinSet()
     }
 
-    // --- CLIPBOARD SECURITY ---
+    /**
+     * Copy sensitive text to the system clipboard and schedule an automatic wipe.
+     *
+     * If `text` is blank the function returns immediately and does nothing. The copied clip
+     * is marked as sensitive on Android 13+ so the platform may treat it accordingly. A background
+     * toast and a log entry are produced when the text is copied and again when the clipboard is wiped.
+     * The clipboard is cleared after the configured clipboard timeout; exceptions raised during the
+     * wipe are ignored.
+     *
+     * @param text The sensitive text to copy to the clipboard.
+     * @param label A human-readable label for the clipboard entry; defaults to "Sigil Content".
+     */
     fun copyToClipboardSecurely(text: String, label: String = "Sigil Content") {
         if (text.isBlank()) return
 
@@ -581,7 +953,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         // 1. Create ClipData
         val clip = ClipData.newPlainText(label, text)
 
-        // 2. Android 13+ Sensitive Flag (Prevents screenshot/preview of the clipboard overlay)
+        // 2. Android 13+ Sensitive Flag
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             clip.description.extras = PersistableBundle().apply {
                 putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
@@ -592,15 +964,15 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
         // 3. User Feedback & Timer
         val timeout = prefs.clipboardTimeoutSeconds
-        Toast.makeText(context, "Copied! Wiping in ${timeout}s", Toast.LENGTH_SHORT).show()
-        addLog("Sensitive data copied to clipboard.")
+
+        showBackgroundToast("Copied! Wiping in ${timeout}s")
+        addLog("Sensitive data copied. Wiping in ${timeout}s.")
 
         // 4. Schedule Auto-Wipe
         viewModelScope.launch(Dispatchers.Main) {
             delay(timeout * 1000L)
 
             try {
-
                 if (clipboard.hasPrimaryClip() && clipboard.primaryClipDescription?.label == label) {
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -609,7 +981,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                         clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
                     }
 
-                    Toast.makeText(context, "Sigil: Clipboard auto-wiped.", Toast.LENGTH_SHORT).show()
+                    showBackgroundToast("Sigil: Clipboard auto-wiped.")
                     addLog("Clipboard auto-wiped.")
                 }
             } catch (_: Exception) {

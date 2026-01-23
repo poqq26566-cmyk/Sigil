@@ -35,10 +35,51 @@ data class SigilAlgorithm(
     val description: String,
     val type: CipherType,
     val defaultMode: CipherMode,
-    // SECURITY INDICATORS
     val isWeak: Boolean = false,
     val securityWarning: String? = null
 )
+
+data class EncryptionProfile(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String,
+    val description: String,
+    val layers: List<CryptoEngine.Algorithm>,
+    val kdfConfig: CryptoEngine.KdfConfig? = null,
+    val isBuiltIn: Boolean = false,
+    val isCompressionEnabled: Boolean = true,
+    val isRaw: Boolean = false
+)
+
+object ProfileRegistry {
+    const val STANDARD_AES_ID = "sigil_standard_aes"
+
+    val defaultProfile = EncryptionProfile(
+        id = "sigil_default_chain",
+        name = "Sigil Chain",
+        description = "Sigil's hybrid stack. XChaCha20 + Serpent + Twofish + AES.",
+        layers = listOf(
+            CryptoEngine.Algorithm.XCHACHA20_POLY1305,
+            CryptoEngine.Algorithm.SERPENT_CBC,
+            CryptoEngine.Algorithm.TWOFISH_CBC,
+            CryptoEngine.Algorithm.AES_GCM
+        ),
+        isBuiltIn = true,
+        isCompressionEnabled = true,
+        isRaw = false
+    )
+
+    val standardProfile = EncryptionProfile(
+        id = STANDARD_AES_ID,
+        name = "Standard AES",
+        description = "Standalone AES-256-GCM. No chaining, no headers, no metadata. For other raw algorithms, use Custom tab. Auto-decrypt unsupported; requires manual profile selection.",
+        layers = listOf(CryptoEngine.Algorithm.AES_GCM),
+        isBuiltIn = true,
+        isCompressionEnabled = false,
+        isRaw = true
+    )
+
+    val builtInProfiles = listOf(defaultProfile, standardProfile)
+}
 
 object AlgorithmRegistry {
     val supportedAlgorithms = listOf(
@@ -193,24 +234,19 @@ data class UiState(
     val autoInput: String = "",
     val autoPassword: String = "",
     val autoOutput: String = "",
-
     val customInput: String = "",
     val customPassword: String = "",
     val customOutput: String = "",
-
     val selectedMode: SigilMode = SigilMode.AUTO,
     val currentScreen: AppScreen = AppScreen.HOME,
     val logs: List<String> = emptyList(),
     val isLoading: Boolean = false,
     val showLogsDialog: Boolean = false,
-
-    // Demo Controls
+    val availableProfiles: List<EncryptionProfile> = ProfileRegistry.builtInProfiles,
+    val activeProfile: EncryptionProfile = ProfileRegistry.defaultProfile,
+    val editingProfileId: String? = null,
     val isDemoDropdownExpanded: Boolean = false,
     val isDemoDrawerOpen: Boolean = false,
-
-    val customLayers: List<LayerEntry> = listOf(
-        LayerEntry(algorithm = CryptoEngine.Algorithm.AES_GCM)
-    ),
-
+    val customLayers: List<LayerEntry> = listOf(LayerEntry(algorithm = CryptoEngine.Algorithm.AES_GCM)),
     val isCompressionEnabled: Boolean = true
 )

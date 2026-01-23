@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.SigilMode
@@ -34,13 +36,28 @@ import dev.animeshvarma.sigil.ui.screens.SteganographyScreen
 import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.launch
 
+/**
+ * Hosts the app's top-level UI, wiring SigilViewModel state to the navigation drawer, header,
+ * screen content, loading overlay, and logs dialog.
+ *
+ * Observes `viewModel.uiState` and:
+ * - Renders a ModalNavigationDrawer whose content and open/close state reflect UI state.
+ * - Shows a centered header with a menu button that opens the drawer.
+ * - Switches main content between app screens with an animated transition.
+ * - Overlays a non-interactive loading scrim while a loading flag is set.
+ * - Displays an in-app logs dialog when requested.
+ *
+ * @param modifier Modifier applied to the root container.
+ * @param viewModel ViewModel that provides UI state and handles navigation and actions. 
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SigilApp(
     modifier: Modifier = Modifier,
     viewModel: SigilViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -49,7 +66,6 @@ fun SigilApp(
         if (uiState.isDemoDrawerOpen) {
             drawerState.open()
         } else {
-            // Only close if it's actually open to avoid state thrashing
             if (drawerState.isOpen) drawerState.close()
         }
     }
@@ -110,7 +126,6 @@ fun SigilApp(
                                 stiffness = AnimationConfig.STIFFNESS,
                                 dampingRatio = AnimationConfig.DAMPING
                             )
-                            // Physics-based transition: Scale + Fade
                             (fadeIn(animationSpec = screenSpring) + scaleIn(initialScale = 0.95f, animationSpec = screenSpring))
                                 .togetherWith(fadeOut(animationSpec = screenSpring) + scaleOut(targetScale = 1.05f, animationSpec = screenSpring))
                         },
@@ -122,7 +137,6 @@ fun SigilApp(
                             AppScreen.STEGANOGRAPHY -> SteganographyScreen()
                             AppScreen.KEYSTORE -> KeystoreScreen(viewModel)
                             AppScreen.SETTINGS -> SettingsScreen(viewModel)
-                            // Feature Flags: Render "Under Construction" for v0.5 modules
                             AppScreen.HEADERLESS,
                             AppScreen.FILE_ENCRYPTION,
                             AppScreen.ASYMMETRIC,
@@ -133,13 +147,15 @@ fun SigilApp(
                 }
             }
 
-            // The Expressive Shape-Shifting Loader (Requires Material3 1.5.0-alpha11+)
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
-                        .clickable(enabled = false) {}, // Block clicks
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {},
                     contentAlignment = Alignment.Center
                 ) {
                     LoadingIndicator(

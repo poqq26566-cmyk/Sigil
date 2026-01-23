@@ -19,8 +19,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.toColorInt
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.ui.components.SigilSegmentedControl
@@ -51,6 +54,21 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.system.exitProcess
 
+/**
+ * Renders the app Settings screen with controls for general options, encryption parameters, privacy, app lock, appearance, and data management.
+ *
+ * Displays interactive sections and dialogs for:
+ * - General (onboarding reset, restart),
+ * - Encryption Parameters (Argon2 settings),
+ * - Privacy & Clipboard (screen shield, clipboard auto-wipe),
+ * - App Lock (PIN/biometrics, grace period, PIN management),
+ * - Appearance (dynamic colors, accent color, dark mode),
+ * - Data Management (reset profiles, reset preferences, wipe all data).
+ *
+ * The UI synchronizes local state with the provided ViewModel and persists preference changes via the ViewModel/prefs. Dialogs handle PIN setup/verification, color selection, and confirmations for destructive actions.
+ *
+ * @param viewModel The SigilViewModel that provides preferences, performs preference updates, and exposes actions such as resetting profiles, resetting preferences, setting/wiping PINs, and wiping all data.
+ */
 @Composable
 fun SettingsScreen(viewModel: SigilViewModel) {
     val context = LocalContext.current
@@ -87,6 +105,10 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var showVerifyPinDialog by remember { mutableStateOf(false) }
     var showColorDialog by remember { mutableStateOf(false) }
     var showSecurityErrorDialog by remember { mutableStateOf(false) }
+
+    // Danger Dialogs
+    var showResetSettingsDialog by remember { mutableStateOf(false) }
+    var showWipeDataDialog by remember { mutableStateOf(false) }
 
     var isSavingPin by remember { mutableStateOf(false) }
 
@@ -145,11 +167,11 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                         Icons.Default.Warning,
                         contentDescription = "Warning",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "These settings must match exactly for encryption and decryption. Only change if you know what you are doing.",
+                        text = "Global defaults. Profiles may override this.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Medium
@@ -363,7 +385,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             onValueChange = { graceMinutes = it },
                             onValueChangeFinished = { prefs.graceDurationMinutes = graceMinutes.toInt() },
                             valueRange = 1f..60f,
-                            steps = 59
                         )
                     }
                 }
@@ -406,6 +427,35 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     })
                 }
             }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // --- DATA & PROFILES ---
+        SettingsHeader("Data Management")
+
+        OutlinedButton(
+            onClick = { showResetSettingsDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.secondary)
+        ) {
+            Icon(Icons.Default.SettingsBackupRestore, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Reset App Preferences")
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Button(
+            onClick = { showWipeDataDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) {
+            Icon(Icons.Default.DeleteForever, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Wipe All Data")
         }
 
         Spacer(Modifier.height(64.dp))
@@ -556,8 +606,162 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             }
         )
     }
+
+    // CONFIRM RESET SETTINGS
+    if (showResetSettingsDialog) {
+        var shouldRestart by remember { mutableStateOf(false) }
+        var resetAll by remember { mutableStateOf(true) }
+        var resetGeneral by remember { mutableStateOf(true) }
+        var resetAppearance by remember { mutableStateOf(true) }
+        var resetKdf by remember { mutableStateOf(true) }
+        var resetProfiles by remember { mutableStateOf(true) }
+
+        AlertDialog(
+            onDismissRequest = { showResetSettingsDialog = false },
+            icon = { Icon(Icons.Default.SettingsBackupRestore, null) },
+            title = { Text("Reset App Preferences") },
+            text = {
+                Column {
+                    Text("Select which settings you want to restore to default values.")
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Reset All Checkbox
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { resetAll = !resetAll },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = resetAll,
+                            onCheckedChange = { resetAll = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Reset Everything", fontWeight = FontWeight.Bold)
+                    }
+
+                    AnimatedVisibility(visible = !resetAll) {
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            // Helper composable
+                            @Composable
+                            fun ResetOption(label: String, state: Boolean, onStateChange: (Boolean) -> Unit) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onStateChange(!state) },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(checked = state, onCheckedChange = onStateChange)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(label)
+                                }
+                            }
+
+                            ResetOption("General, Privacy & App Lock", resetGeneral) { resetGeneral = it }
+                            ResetOption("Appearance Settings", resetAppearance) { resetAppearance = it }
+                            ResetOption("Global Encryption Defaults", resetKdf) { resetKdf = it }
+                            ResetOption("Saved Encryption Profiles", resetProfiles) { resetProfiles = it }
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { shouldRestart = !shouldRestart },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = shouldRestart,
+                            onCheckedChange = { shouldRestart = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Restart App immediately")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val finalGeneral = if (resetAll) true else resetGeneral
+                    val finalAppearance = if (resetAll) true else resetAppearance
+                    val finalKdf = if (resetAll) true else resetKdf
+                    val finalProfiles = if (resetAll) true else resetProfiles
+
+                    // Perform Reset via Prefs
+                    prefs.resetSettings(
+                        resetGeneral = finalGeneral,
+                        resetAppearance = finalAppearance,
+                        resetKdf = finalKdf,
+                        resetProfiles = finalProfiles,
+                        synchronous = shouldRestart
+                    )
+
+                    if (shouldRestart) {
+                        restartApp(context)
+                    } else {
+                        // Manually update UI state
+                        val freshPrefs = viewModel.getPrefs()
+
+                        if (finalGeneral) {
+                            onboardingToggle = true
+                            lockMode = freshPrefs.lockMode
+                            graceEnabled = freshPrefs.isGracePeriodEnabled
+                            graceMinutes = freshPrefs.graceDurationMinutes.toFloat()
+                            screenShield = freshPrefs.isScreenShieldEnabled
+                            clipTimeout = freshPrefs.clipboardTimeoutSeconds.toFloat()
+                        }
+
+                        if (finalAppearance) {
+                            dynamicColors = freshPrefs.isDynamicColorsEnabled
+                            darkMode = freshPrefs.isDarkModeEnabled
+                            selectedColorInt = freshPrefs.selectedThemeColor
+                        }
+
+                        if (finalKdf) {
+                            kdfIterations = freshPrefs.kdfIterations.toFloat()
+                            kdfMemory = freshPrefs.kdfMemoryPow2.toFloat()
+                            kdfParallelism = freshPrefs.kdfParallelism.toFloat()
+                        }
+                    }
+
+                    showResetSettingsDialog = false
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetSettingsDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // CONFIRM WIPE ALL
+    if (showWipeDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showWipeDataDialog = false },
+            icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Scorched Earth") },
+            text = { Text("This will permanently delete ALL data, including:\n- Keys in Vault\n- Settings & Profiles\n- PINs & Biometrics\n\nThe app will restart.") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.wipeAllData() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("NUKE IT") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeDataDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
+/**
+ * Displays a styled section header for settings screens.
+ *
+ * Renders the provided text using the theme's `labelLarge` typography and primary color,
+ * with leading and bottom padding to align with other settings content.
+ *
+ * @param text The header text to display.
+ */
 @Composable
 fun SettingsHeader(text: String) {
     Text(
@@ -593,6 +797,18 @@ fun RowScope.RGBField(label: String, value: String, onValueChange: (String) -> U
     )
 }
 
+/**
+ * Shows a dialog that lets the user pick an accent color using an HSV color wheel, a brightness slider,
+ * a 6-digit HEX input, or individual R/G/B inputs.
+ *
+ * The dialog initializes to `initialColor`. User interactions update an internal selected color;
+ * tapping "Apply" invokes `onColorSelected` with the current selection, and dismissing the dialog
+ * invokes `onDismiss`.
+ *
+ * @param initialColor The starting color shown when the dialog opens.
+ * @param onDismiss Called when the dialog is dismissed or the "Cancel" button is pressed.
+ * @param onColorSelected Called with the selected Color when the user confirms ("Apply").
+ */
 @Composable
 fun AdvancedColorPickerDialog(
     initialColor: Color,
@@ -625,7 +841,8 @@ fun AdvancedColorPickerDialog(
     fun updateFromHex(hex: String) {
         try {
             if (hex.length == 6) {
-                val color = Color(android.graphics.Color.parseColor("#$hex"))
+                // Fix: Use KTX toColorInt for cleaner logic
+                val color = Color("#$hex".toColorInt())
                 currentColor = color
                 android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
                 updateInputs(color)
