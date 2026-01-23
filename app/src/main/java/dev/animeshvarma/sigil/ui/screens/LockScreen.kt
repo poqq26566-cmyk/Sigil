@@ -27,6 +27,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.util.BiometricHelper
@@ -38,6 +40,7 @@ fun LockScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val prefs = viewModel.getPrefs()
     val uiState by viewModel.uiState.collectAsState()
 
@@ -46,20 +49,17 @@ fun LockScreen(
     var pinInput by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-
     var isPinFallback by remember { mutableStateOf(false) }
-
     var showWipeDialog by remember { mutableStateOf(false) }
-
     var showBiometricInvalidatedDialog by remember { mutableStateOf(false) }
 
+    // Helper to trigger bio
     fun triggerBiometric() {
         if (context is FragmentActivity) {
             BiometricHelper.showPrompt(
                 activity = context,
                 onSuccess = { _ -> onUnlock() },
                 onFailure = {
-                    isPinFallback = true
                 },
                 onError = { error ->
                     showError = true
@@ -76,8 +76,22 @@ fun LockScreen(
             showBiometricInvalidatedDialog = true
             isPinFallback = true
         }
-        else if (lockMode == LockMode.DEVICE) {
-            triggerBiometric()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (lockMode == LockMode.DEVICE &&
+                    !showBiometricInvalidatedDialog &&
+                    !isPinFallback
+                ) {
+                    triggerBiometric()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -195,6 +209,7 @@ fun LockScreen(
                     }
                 }
 
+                // Retry Biometrics Button (Only if valid)
                 if (lockMode == LockMode.DEVICE && isPinFallback && !BiometricHelper.hasBiometricChanged()) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(onClick = { triggerBiometric() }) {
@@ -205,7 +220,6 @@ fun LockScreen(
                 }
 
             } else {
-                // Biometric Button State
                 Button(
                     onClick = { triggerBiometric() },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -229,7 +243,6 @@ fun LockScreen(
     if (showBiometricInvalidatedDialog) {
         AlertDialog(
             onDismissRequest = {
-                showBiometricInvalidatedDialog = false
             },
             icon = {
                 Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.primary)

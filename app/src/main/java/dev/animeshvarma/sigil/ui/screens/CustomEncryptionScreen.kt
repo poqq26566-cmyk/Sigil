@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.AlgorithmRegistry
@@ -67,7 +69,18 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
     var showAddLayerSheet by remember { mutableStateOf(false) }
     var showSaveProfileDialog by remember { mutableStateOf(false) }
     var showOverwriteDialog by remember { mutableStateOf<EncryptionProfile?>(null) }
-
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                showAddLayerSheet = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     val listState = rememberLazyListState()
     val vaultEntries by viewModel.vaultEntries.collectAsState()
 

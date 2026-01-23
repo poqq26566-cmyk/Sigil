@@ -8,7 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +20,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import dev.animeshvarma.sigil.data.LockManager
+import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.ui.OnboardingOrchestrator
 import dev.animeshvarma.sigil.ui.SigilApp
 import dev.animeshvarma.sigil.ui.screens.LockScreen
@@ -32,7 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: SigilViewModel
     private lateinit var prefs: SigilPreferences
 
-    private val isLockedState = mutableStateOf(false)
+    private val isContentHidden = mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,33 +43,34 @@ class MainActivity : AppCompatActivity() {
         prefs = SigilPreferences(this)
         lockManager = LockManager(this)
 
-        // 1. SHIELD PROTOCOL: Immediate Screen Protection
         updateSecureFlag()
 
-        // 2. GATEKEEPER: Check Lock Status on Cold Start
-        if (lockManager.isAppLocked()) {
-            isLockedState.value = true
-        }
+        isContentHidden.value = lockManager.isAppLocked()
 
-        // 3. AMNESIA PROTOCOL: Lifecycle Enforcer
+        // --- LIFECYCLE SECURITY OBSERVER ---
         lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (prefs.lockMode != LockMode.NONE) {
+                        isContentHidden.value = true
+                    }
+                }
                 Lifecycle.Event.ON_STOP -> {
                     lockManager.recordBackgroundEvent()
-                    updateSecureFlag()
+
+                    if (!prefs.isGracePeriodEnabled && prefs.lockMode != LockMode.NONE) {
+                        viewModel.clearSensitiveData()
+                    }
                 }
                 Lifecycle.Event.ON_START -> {
                     updateSecureFlag()
 
+
                     if (lockManager.isAppLocked()) {
-                        isLockedState.value = true
+                        isContentHidden.value = true
                         viewModel.clearSensitiveData()
-                    }
-                }
-                Lifecycle.Event.ON_RESUME -> {
-                    if (!isLockedState.value && lockManager.isAppLocked()) {
-                        isLockedState.value = true
-                        viewModel.clearSensitiveData()
+                    } else {
+                        isContentHidden.value = false
                     }
                 }
                 else -> {}
@@ -78,11 +80,9 @@ class MainActivity : AppCompatActivity() {
         // Onboarding Check
         val showOnboarding = mutableStateOf(!prefs.hasCompletedOnboarding())
 
-        // Process any incoming text sharing
         checkAndProcessIntent(intent, viewModel)
 
         setContent {
-            // Theme Injection
             val systemDark = isSystemInDarkTheme()
             val useDarkTheme = if (prefs.isDynamicColorsEnabled) systemDark else prefs.isDarkModeEnabled
 
@@ -94,26 +94,24 @@ class MainActivity : AppCompatActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
-                        // LAYER 1: MAIN APPLICATION
-                        SigilApp(viewModel = viewModel)
-
-                        // LAYER 2: LOCK SCREEN OVERLAY
-                        if (isLockedState.value) {
+                        // Show LockScreen if hidden
+                        if (isContentHidden.value && prefs.lockMode != LockMode.NONE) {
                             LockScreen(
                                 viewModel = viewModel,
                                 onUnlock = {
-                                    isLockedState.value = false
+                                    isContentHidden.value = false
                                     viewModel.consumePendingIntent()
                                 }
                             )
-                        }
-
-                        // LAYER 3: ONBOARDING
-                        if (!isLockedState.value) {
+                        } else {
                             AnimatedVisibility(
-                                visible = showOnboarding.value,
-                                exit = fadeOut(animationSpec = tween(500))
+                                visible = true,
+                                enter = fadeIn(tween(300))
                             ) {
+                                SigilApp(viewModel = viewModel)
+                            }
+
+                            if (showOnboarding.value) {
                                 OnboardingOrchestrator(
                                     viewModel = viewModel,
                                     onComplete = {
@@ -135,14 +133,21 @@ class MainActivity : AppCompatActivity() {
         checkAndProcessIntent(intent, viewModel)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (prefs.lockMode != LockMode.NONE) {
+            viewModel.clearSensitiveData()
+        }
+        super.onSaveInstanceState(outState)
+    }
+
     private fun checkAndProcessIntent(intent: Intent?, viewModel: SigilViewModel) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 intent.removeExtra(Intent.EXTRA_TEXT)
 
-                if (lockManager.isAppLocked() || isLockedState.value) {
+                if (isContentHidden.value || prefs.lockMode != LockMode.NONE) {
                     viewModel.cachePendingIntent(sharedText)
-                    isLockedState.value = true
+                    isContentHidden.value = true
                 } else {
                     viewModel.handleIncomingSharedText(sharedText)
                 }

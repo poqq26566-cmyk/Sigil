@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,7 +42,10 @@ fun SecurePasswordInput(
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    // Dialog States
     var showNameDialog by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf(false) }
     var newKeyName by remember { mutableStateOf("") }
 
     val haptic = LocalHapticFeedback.current
@@ -201,7 +205,7 @@ fun SecurePasswordInput(
                         value = newKeyName,
                         onValueChange = { newKeyName = it },
                         singleLine = true,
-                        placeholder = { Text("e.g. Master Key 2026") },
+                        placeholder = { Text("Enter a unique name...") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -211,15 +215,48 @@ fun SecurePasswordInput(
                 Button(
                     onClick = {
                         if (newKeyName.isNotBlank()) {
-                            onSaveRequested(newKeyName)
-                            showNameDialog = false
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // CHECK FOR DUPLICATES
+                            val exists = vaultEntries.any { it.alias.equals(newKeyName, ignoreCase = true) }
+                            if (exists) {
+                                showNameDialog = false
+                                showOverwriteDialog = true
+                            } else {
+                                onSaveRequested(newKeyName)
+                                showNameDialog = false
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
                         }
                     }
                 ) { Text("Save") }
             },
             dismissButton = {
                 TextButton(onClick = { showNameDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // OVERWRITE WARNING DIALOG
+    if (showOverwriteDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverwriteDialog = false },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Key Exists") },
+            text = { Text("A key named '$newKeyName' already exists in the Vault.\n\nDo you want to overwrite it?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onSaveRequested(newKeyName)
+                        showOverwriteDialog = false
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Overwrite") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showOverwriteDialog = false
+                    showNameDialog = true
+                }) { Text("Change Name") }
             }
         )
     }

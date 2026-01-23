@@ -471,15 +471,17 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             } catch (_: Exception) {
                 val errorReport = StringBuilder()
                 if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
-                    errorReport.append("RAW DECRYPTION FAILED\n\n")
-                    errorReport.append("Raw mode has NO integrity checks. The password or profile is incorrect, or the data is garbage.")
+                    errorReport.append("Raw Decryption Failed\n")
+                    errorReport.append("--------------------------\n")
+                    errorReport.append("Integrity validation is disabled in Raw mode. Please manually ensure the password, profile, and data are correct.")
                 } else {
-                    errorReport.append("DECRYPTION FAILED\n\n")
-                    errorReport.append("POSSIBLE CAUSES:\n")
-                    errorReport.append("1. Wrong password.\n")
-                    errorReport.append("2. Corrupted data.\n")
-                    errorReport.append("3. Security mismatch (Check KDF iterations/memory).\n")
-                    errorReport.append("4. Profile mismatch (Are you trying to decrypt Raw data with a Container profile?).\n")
+                    errorReport.append("Decryption Failed\n")
+                    errorReport.append("--------------------------\n")
+                    errorReport.append("The system could not decrypt the data. Please verify the following:\n")
+                    errorReport.append(" • Credentials: Is the password/key correct?\n")
+                    errorReport.append(" • Integrity: The data may be corrupted or truncated.\n")
+                    errorReport.append(" • Security Parameters: Check KDF iterations and memory limits.\n")
+                    errorReport.append(" • Profile Context: Ensure you aren't using a the correct profile.\n")
                 }
 
                 val finalMessage = errorReport.toString()

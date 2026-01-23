@@ -154,7 +154,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                         Icons.Default.Warning,
                         contentDescription = "Warning",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
