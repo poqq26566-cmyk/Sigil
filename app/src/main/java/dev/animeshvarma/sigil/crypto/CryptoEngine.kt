@@ -126,8 +126,11 @@ object CryptoEngine {
 
         // 2. Root Secret (Argon2id)
         val passBytes = toBytes(password)
-        val rootSecret = deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
-        passBytes.fill(0.toByte())
+        val rootSecret = try {
+            deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
+        } finally {
+            passBytes.fill(0.toByte())
+        }
 
         logCallback("Root Secret derived (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
@@ -255,8 +258,11 @@ object CryptoEngine {
 
             // Reconstruct Root
             val passBytes = toBytes(password)
-            rootSecret = deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
-            passBytes.fill(0.toByte())
+            rootSecret = try {
+                deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
+            } finally {
+                passBytes.fill(0.toByte())
+            }
             logCallback("Root Secret reconstructed (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
             val macKey = deriveSubKey(rootSecret, salt, "SIGIL_GLOBAL_MAC", 32)
@@ -368,8 +374,11 @@ object CryptoEngine {
         // 3. Derive Key (Argon2id direct to Key Size)
         val keySize = getKeySize(algorithm)
         val passBytes = toBytes(password)
-        val key = deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
-        passBytes.fill(0.toByte())
+        val key = try {
+            deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+        } finally {
+            passBytes.fill(0.toByte())
+        }
 
         logCallback("Key derived (Argon2id).")
 
@@ -439,8 +448,11 @@ object CryptoEngine {
             // 3. Derive Key
             val keySize = getKeySize(algorithm)
             val passBytes = toBytes(password)
-            val key = deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
-            passBytes.fill(0.toByte())
+            val key = try {
+                deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+            } finally {
+                passBytes.fill(0.toByte())
+            }
 
             // 4. Decrypt
             val plaintext = try {

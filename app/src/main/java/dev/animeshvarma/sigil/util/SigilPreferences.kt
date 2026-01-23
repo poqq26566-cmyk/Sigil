@@ -142,6 +142,7 @@ class SigilPreferences(context: Context) {
                     for (j in 0 until layersArray.length()) {
                         layers.add(CryptoEngine.Algorithm.valueOf(layersArray.getString(j)))
                     }
+                    if (layers.isEmpty()) throw IllegalArgumentException("Profile has no layers")
 
                     // Parse Optional KDF
                     var kdfConfig: CryptoEngine.KdfConfig? = null
