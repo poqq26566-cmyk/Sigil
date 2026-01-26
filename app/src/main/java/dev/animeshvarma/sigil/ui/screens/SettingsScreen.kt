@@ -58,7 +58,6 @@ import kotlin.math.sin
 import kotlin.system.exitProcess
 
 private const val DEFAULT_LABEL = "(Default)"
-
 /**
  * Renders the app Settings screen with controls for general options, encryption parameters, privacy, app lock, appearance, and data management.
  *
@@ -616,7 +615,9 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             Spacer(Modifier.height(16.dp))
                             OutlinedTextField(
                                 value = firstInput,
-                                onValueChange = { firstInput = it },
+                                onValueChange = { input ->
+                                    firstInput = if (selectedLockType == LockType.PIN) input.filter { it.isDigit() } else input
+                                },
                                 label = { Text("Enter Secret") },
                                 singleLine = true,
                                 visualTransformation = PasswordVisualTransformation(),
@@ -668,8 +669,8 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             Spacer(Modifier.height(16.dp))
                             OutlinedTextField(
                                 value = confirmInput,
-                                onValueChange = {
-                                    confirmInput = it
+                                onValueChange = { input ->
+                                    confirmInput = if (selectedLockType == LockType.PIN) input.filter { it.isDigit() } else input
                                     error = false
                                 },
                                 label = { Text("Confirm Secret") },
@@ -699,13 +700,16 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             onClick = {
                                 if (confirmInput == tempSecret) {
                                     isSavingPin = true
-                                    viewModel.setAppLock(tempSecret, selectedLockType)
-
-                                    val newMode = pendingLockMode ?: LockMode.CUSTOM
-                                    lockMode = newMode
-                                    viewModel.setLockMode(newMode)
-
-                                    cleanupSetup(true)
+                                    viewModel.setAppLock(tempSecret, selectedLockType) { success ->
+                                        if (success) {
+                                            val newMode = pendingLockMode ?: LockMode.CUSTOM
+                                            lockMode = newMode
+                                            viewModel.setLockMode(newMode)
+                                            cleanupSetup(true)
+                                        } else {
+                                            isSavingPin = false
+                                        }
+                                    }
                                 } else {
                                     error = true
                                 }

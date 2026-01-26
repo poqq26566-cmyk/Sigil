@@ -7,6 +7,7 @@ import android.util.Log
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -57,14 +58,14 @@ class SigilPreferences(context: Context) {
         }
         set(value) = prefs.edit { putString(KEY_LOCK_MODE, value.name) }
 
-    var lockType: dev.animeshvarma.sigil.model.LockType
+    var lockType: LockType
         get() = try {
-            dev.animeshvarma.sigil.model.LockType.valueOf(
-                prefs.getString(KEY_LOCK_TYPE, dev.animeshvarma.sigil.model.LockType.PIN.name)
-                    ?: dev.animeshvarma.sigil.model.LockType.PIN.name
+            LockType.valueOf(
+                prefs.getString(KEY_LOCK_TYPE, LockType.PIN.name)
+                    ?: LockType.PIN.name
             )
         } catch (_: Exception) {
-            dev.animeshvarma.sigil.model.LockType.PIN
+            LockType.PIN
         }
         set(value) = prefs.edit { putString(KEY_LOCK_TYPE, value.name) }
 
@@ -244,6 +245,7 @@ class SigilPreferences(context: Context) {
             if (resetGeneral) {
                 // Security & General
                 putString(KEY_LOCK_MODE, LockMode.NONE.name)
+                putString(KEY_LOCK_TYPE, LockType.PIN.name)
                 putBoolean(KEY_GRACE_ENABLED, false)
                 putInt(KEY_GRACE_MINUTES, 5)
                 putBoolean(KEY_SCREEN_SHIELD, true)

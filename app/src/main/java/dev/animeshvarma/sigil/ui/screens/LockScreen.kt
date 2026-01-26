@@ -35,8 +35,6 @@ import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.util.BiometricHelper
 
-private const val ERROR_INCORRECT_PIN = "Incorrect PIN"
-
 /**
  * Render the Sigil lock screen and manage PIN and biometric authentication flows.
  *
@@ -63,6 +61,8 @@ fun LockScreen(
 
     val lockMode = prefs.lockMode
     val lockType = prefs.lockType
+
+    val incorrectAuthText = if (lockType == LockType.PIN) "Incorrect PIN" else "Incorrect Password"
 
     var pinInput by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
@@ -192,7 +192,7 @@ fun LockScreen(
                                         onUnlock()
                                     } else {
                                         showError = true
-                                        errorMessage = ERROR_INCORRECT_PIN
+                                        errorMessage = incorrectAuthText
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         pinInput = ""
                                     }
@@ -206,7 +206,7 @@ fun LockScreen(
 
                 if (showError) {
                     Text(
-                        text = errorMessage.ifEmpty { ERROR_INCORRECT_PIN },
+                        text = errorMessage.ifEmpty { incorrectAuthText },
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -222,7 +222,7 @@ fun LockScreen(
                                 onUnlock()
                             } else {
                                 showError = true
-                                errorMessage = ERROR_INCORRECT_PIN
+                                errorMessage = incorrectAuthText
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 pinInput = ""
                             }
@@ -268,7 +268,8 @@ fun LockScreen(
             Spacer(Modifier.height(16.dp))
 
             TextButton(onClick = { showWipeDialog = true }) {
-                Text("Forgot PIN? Reset App", color = MaterialTheme.colorScheme.error)
+                val forgotText = if (lockType == LockType.PIN) "Forgot PIN? Reset App" else "Forgot Password? Reset App"
+                Text(forgotText, color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -285,7 +286,8 @@ fun LockScreen(
                 Text("Security Alert")
             },
             text = {
-                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to PIN authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
+                val authType = if (lockType == LockType.PIN) "PIN" else "password"
+                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to $authType authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
             },
             confirmButton = {
                 TextButton(

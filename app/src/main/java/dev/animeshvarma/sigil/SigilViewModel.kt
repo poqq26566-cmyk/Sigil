@@ -819,18 +819,33 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
      *
      * @param secret The plaintext secret (PIN or Password).
      * @param type The type of lock (used to determine keyboard layout on LockScreen).
+     * @param onResult Callback indicating success or failure.
      */
-    fun setAppLock(secret: String, type: LockType) {
+    fun setAppLock(secret: String, type: LockType, onResult: (Boolean) -> Unit) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            lockManager.setAppLock(secret, type)
+            var success = false
+            try {
+                lockManager.setAppLock(secret, type)
 
-            delay(500)
+                delay(500)
 
-            withContext(Dispatchers.Main) {
-                addLog("App Lock enabled (${type.name}).")
+                withContext(Dispatchers.Main) {
+                    addLog("Custom Security PIN set (TEE Encrypted).")
+                    addLog("App Lock enabled (${type.name}).")
+                }
+                success = true
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    addLog("Error: Failed to enable App Lock.")
+                }
+                success = false
+            } finally {
                 _uiState.update { it.copy(isLoading = false) }
+                withContext(Dispatchers.Main) {
+                    onResult(success)
+                }
             }
         }
     }
@@ -843,7 +858,12 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val isValid = lockManager.verifySecret(input)
+            val isValid = try {
+                lockManager.verifySecret(input)
+            } catch (_: Exception) {
+                addLog("Error: App lock verification failed.")
+                false
+            }
 
             if (!isValid) delay(1000)
 
@@ -854,7 +874,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
 
     /**
      * Performs a full application data wipe and restarts the app.
