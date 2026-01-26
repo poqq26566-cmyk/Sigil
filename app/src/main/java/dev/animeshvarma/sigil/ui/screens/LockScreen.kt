@@ -217,6 +217,7 @@ fun LockScreen(
                 Button(
                     onClick = {
                         keyboardController?.hide()
+                        if (pinInput.isEmpty()) return@Button
                         viewModel.verifyAppSecret(pinInput) { isValid ->
                             if (isValid) {
                                 onUnlock()
@@ -230,7 +231,7 @@ fun LockScreen(
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = !uiState.isLoading
+                    enabled = !uiState.isLoading && pinInput.isNotEmpty()
                 ) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(

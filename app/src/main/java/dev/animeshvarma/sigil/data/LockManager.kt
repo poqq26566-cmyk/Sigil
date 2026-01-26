@@ -114,7 +114,7 @@ class LockManager(context: Context) {
         }
     }
 
-    fun hasPinSet(): Boolean {
+    fun hasAppLockSet(): Boolean {
         return authPrefs.contains(KEY_PIN_HASH) && authPrefs.contains(KEY_PIN_SALT)
     }
 }

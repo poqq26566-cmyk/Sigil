@@ -832,7 +832,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 delay(500)
 
                 withContext(Dispatchers.Main) {
-                    addLog("Custom Security PIN set (TEE Encrypted).")
+                    addLog("App secret set (TEE Encrypted).")
                     addLog("App Lock enabled (${type.name}).")
                 }
                 success = true
@@ -961,7 +961,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
     fun getPrefs() = prefs
 
     fun hasAppLockSet(): Boolean {
-        return lockManager.hasPinSet()
+        return lockManager.hasAppLockSet()
     }
 
     /**
