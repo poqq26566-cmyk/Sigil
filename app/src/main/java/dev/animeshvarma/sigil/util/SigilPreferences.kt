@@ -19,6 +19,7 @@ class SigilPreferences(context: Context) {
     companion object {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_LOCK_MODE = "lock_mode"
+        private const val KEY_LOCK_TYPE = "lock_type_enum"
         private const val KEY_KDF_ITERATIONS = "kdf_iterations"
         private const val KEY_KDF_MEMORY = "kdf_memory_pow2"
         private const val KEY_KDF_PARALLELISM = "kdf_parallelism"
@@ -55,6 +56,17 @@ class SigilPreferences(context: Context) {
             LockMode.NONE
         }
         set(value) = prefs.edit { putString(KEY_LOCK_MODE, value.name) }
+
+    var lockType: dev.animeshvarma.sigil.model.LockType
+        get() = try {
+            dev.animeshvarma.sigil.model.LockType.valueOf(
+                prefs.getString(KEY_LOCK_TYPE, dev.animeshvarma.sigil.model.LockType.PIN.name)
+                    ?: dev.animeshvarma.sigil.model.LockType.PIN.name
+            )
+        } catch (_: Exception) {
+            dev.animeshvarma.sigil.model.LockType.PIN
+        }
+        set(value) = prefs.edit { putString(KEY_LOCK_TYPE, value.name) }
 
     // --- Grace Period ---
     var isGracePeriodEnabled: Boolean

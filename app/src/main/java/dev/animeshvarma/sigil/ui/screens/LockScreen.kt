@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,7 +32,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.util.BiometricHelper
+
+private const val ERROR_INCORRECT_PIN = "Incorrect PIN"
 
 /**
  * Render the Sigil lock screen and manage PIN and biometric authentication flows.
@@ -52,11 +56,13 @@ fun LockScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val prefs = viewModel.getPrefs()
     val uiState by viewModel.uiState.collectAsState()
 
     val lockMode = prefs.lockMode
+    val lockType = prefs.lockType
 
     var pinInput by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
@@ -68,10 +74,15 @@ fun LockScreen(
     // Helper to trigger bio
     fun triggerBiometric() {
         if (context is FragmentActivity) {
+            val currentLockType = prefs.lockType
+            val negativeText = if (currentLockType == LockType.PIN) "Use Sigil PIN" else "Use Sigil Password"
+
             BiometricHelper.showPrompt(
                 activity = context,
+                negativeButtonText = negativeText,
                 onSuccess = { _ -> onUnlock() },
                 onFailure = {
+                    isPinFallback = true
                 },
                 onError = { error ->
                     showError = true
@@ -152,6 +163,9 @@ fun LockScreen(
             Spacer(Modifier.height(48.dp))
 
             if (lockMode == LockMode.CUSTOM || isPinFallback || showBiometricInvalidatedDialog) {
+                val kbType = if (lockType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
+                val labelText = if (lockType == LockType.PIN) "Enter Sigil PIN" else "Enter Password"
+
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = {
@@ -161,23 +175,24 @@ fun LockScreen(
                             errorMessage = ""
                         }
                     },
-                    label = { Text("Enter Sigil PIN") },
+                    label = { Text(labelText) },
                     singleLine = true,
                     isError = showError,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.NumberPassword,
+                        keyboardType = kbType,
                         imeAction = ImeAction.Go
                     ),
                     keyboardActions = KeyboardActions(
                         onGo = {
+                            keyboardController?.hide()
                             if (pinInput.isNotEmpty()) {
-                                viewModel.verifyAppPin(pinInput) { isValid ->
+                                viewModel.verifyAppSecret(pinInput) { isValid ->
                                     if (isValid) {
                                         onUnlock()
                                     } else {
                                         showError = true
-                                        errorMessage = "Incorrect PIN"
+                                        errorMessage = ERROR_INCORRECT_PIN
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         pinInput = ""
                                     }
@@ -191,7 +206,7 @@ fun LockScreen(
 
                 if (showError) {
                     Text(
-                        text = errorMessage.ifEmpty { "Incorrect PIN" },
+                        text = errorMessage.ifEmpty { ERROR_INCORRECT_PIN },
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -201,12 +216,13 @@ fun LockScreen(
 
                 Button(
                     onClick = {
-                        viewModel.verifyAppPin(pinInput) { isValid ->
+                        keyboardController?.hide()
+                        viewModel.verifyAppSecret(pinInput) { isValid ->
                             if (isValid) {
                                 onUnlock()
                             } else {
                                 showError = true
-                                errorMessage = "Incorrect PIN"
+                                errorMessage = ERROR_INCORRECT_PIN
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 pinInput = ""
                             }

@@ -22,6 +22,7 @@ import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LayerEntry
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.model.ProfileRegistry
 import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
@@ -812,25 +813,37 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         prefs.lockMode = mode
     }
 
-    fun setCustomPin(pin: String) {
+    /**
+     * Sets the application lock (PIN or Password) using the LockManager.
+     * This replaces the old setCustomPin method.
+     *
+     * @param secret The plaintext secret (PIN or Password).
+     * @param type The type of lock (used to determine keyboard layout on LockScreen).
+     */
+    fun setAppLock(secret: String, type: LockType) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            lockManager.setCustomPin(pin)
+            lockManager.setAppLock(secret, type)
+
             delay(500)
 
             withContext(Dispatchers.Main) {
-                addLog("Custom Security PIN set (TEE Encrypted).")
+                addLog("App Lock enabled (${type.name}).")
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
-    fun verifyAppPin(input: String, onResult: (Boolean) -> Unit) {
+    /**
+     * Verifies the provided input against the stored Argon2 hash.
+     * Renamed from verifyAppPin to verifyAppSecret to support Passwords.
+     */
+    fun verifyAppSecret(input: String, onResult: (Boolean) -> Unit) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val isValid = lockManager.verifyPin(input)
+            val isValid = lockManager.verifySecret(input)
 
             if (!isValid) delay(1000)
 
@@ -928,7 +941,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPrefs() = prefs
 
-    fun hasSecurityPinSet(): Boolean {
+    fun hasAppLockSet(): Boolean {
         return lockManager.hasPinSet()
     }
 

@@ -56,8 +56,8 @@ class LockManager(context: Context) {
     }
 
     // --- PIN MANAGEMENT (Argon2 Hashing) ---
-    fun setCustomPin(pin: String) {
-        val pinChars = pin.toCharArray()
+    fun setAppLock(secret: String, type: dev.animeshvarma.sigil.model.LockType) {
+        val secretChars = secret.toCharArray()
 
         // 1. Generate Random Salt
         val salt = ByteArray(SALT_SIZE)
@@ -65,7 +65,7 @@ class LockManager(context: Context) {
 
         try {
             // 2. Calculate Argon2 Hash
-            val hash = CryptoEngine.hashPin(pinChars, salt)
+            val hash = CryptoEngine.hashPin(secretChars, salt)
 
             // 3. Store Base64 encoded Salt and Hash
             authPrefs.edit {
@@ -73,16 +73,17 @@ class LockManager(context: Context) {
                 putString(KEY_PIN_HASH, Base64.encodeToString(hash, Base64.NO_WRAP))
             }
 
-            // 4. Enable Lock Mode
+            // 4. Update Preferences
             prefs.lockMode = LockMode.CUSTOM
+            prefs.lockType = type
 
         } finally {
             // 5. Cleanup memory
-            SecureMemory.wipe(pinChars)
+            SecureMemory.wipe(secretChars)
         }
     }
 
-    fun verifyPin(inputPin: String): Boolean {
+    fun verifySecret(inputSecret: String): Boolean {
         // 1. Load Salt & Hash
         val saltString = authPrefs.getString(KEY_PIN_SALT, null) ?: return false
         val storedHashString = authPrefs.getString(KEY_PIN_HASH, null) ?: return false
@@ -90,7 +91,7 @@ class LockManager(context: Context) {
         val salt = Base64.decode(saltString, Base64.NO_WRAP)
         val storedHash = Base64.decode(storedHashString, Base64.NO_WRAP)
 
-        val inputChars = inputPin.toCharArray()
+        val inputChars = inputSecret.toCharArray()
 
         return try {
             // 2. Hash the Input using stored Salt
@@ -108,7 +109,7 @@ class LockManager(context: Context) {
         } catch (_: Exception) {
             false
         } finally {
-            // 4. Wipe Input
+            // 4. Wipe Input Memory
             SecureMemory.wipe(inputChars)
         }
     }

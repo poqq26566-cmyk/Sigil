@@ -29,6 +29,8 @@ enum class AppScreen(val title: String) {
 enum class CipherType { BLOCK, STREAM }
 enum class CipherMode { GCM, CBC, POLY1305 }
 
+enum class LockType { PIN, PASSWORD }
+
 data class SigilAlgorithm(
     val id: String,
     val name: String,

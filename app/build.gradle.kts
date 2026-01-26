@@ -12,9 +12,15 @@ android {
         applicationId = "dev.animeshvarma.sigil"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        //Todo: Change on each revision
-        versionName = "0.5.0-dev02"
+        // Schema: Positional logic (Major*10000 + Minor*100 + Patch).
+        // Ensures strictly increasing, parseable codes (Implemented in v0.4.5).
+        versionCode = 405
+        /* v0.5.0 Scope Split:
+         * - v0.4.5 ships Profiles & Engine updates (Current).
+         * - v0.5.0 defers Steganography & remaining features (Planned).
+         * Context: Maintains consistent update size and monthly cadence.
+         */
+        versionName = "0.4.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
