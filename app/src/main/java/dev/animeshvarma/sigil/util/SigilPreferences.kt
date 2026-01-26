@@ -7,6 +7,7 @@ import android.util.Log
 import dev.animeshvarma.sigil.crypto.CryptoEngine
 import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -19,6 +20,7 @@ class SigilPreferences(context: Context) {
     companion object {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_LOCK_MODE = "lock_mode"
+        private const val KEY_LOCK_TYPE = "lock_type_enum"
         private const val KEY_KDF_ITERATIONS = "kdf_iterations"
         private const val KEY_KDF_MEMORY = "kdf_memory_pow2"
         private const val KEY_KDF_PARALLELISM = "kdf_parallelism"
@@ -55,6 +57,17 @@ class SigilPreferences(context: Context) {
             LockMode.NONE
         }
         set(value) = prefs.edit { putString(KEY_LOCK_MODE, value.name) }
+
+    var lockType: LockType
+        get() = try {
+            LockType.valueOf(
+                prefs.getString(KEY_LOCK_TYPE, LockType.PIN.name)
+                    ?: LockType.PIN.name
+            )
+        } catch (_: Exception) {
+            LockType.PIN
+        }
+        set(value) = prefs.edit { putString(KEY_LOCK_TYPE, value.name) }
 
     // --- Grace Period ---
     var isGracePeriodEnabled: Boolean
@@ -232,6 +245,7 @@ class SigilPreferences(context: Context) {
             if (resetGeneral) {
                 // Security & General
                 putString(KEY_LOCK_MODE, LockMode.NONE.name)
+                putString(KEY_LOCK_TYPE, LockType.PIN.name)
                 putBoolean(KEY_GRACE_ENABLED, false)
                 putInt(KEY_GRACE_MINUTES, 5)
                 putBoolean(KEY_SCREEN_SHIELD, true)

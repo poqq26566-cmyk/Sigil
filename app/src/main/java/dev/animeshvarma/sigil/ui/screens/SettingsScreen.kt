@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Password
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.ui.components.SigilSegmentedControl
 import dev.animeshvarma.sigil.util.BiometricHelper
 import kotlin.math.atan2
@@ -54,6 +57,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.system.exitProcess
 
+private const val DEFAULT_LABEL = "(Default)"
 /**
  * Renders the app Settings screen with controls for general options, encryption parameters, privacy, app lock, appearance, and data management.
  *
@@ -101,7 +105,6 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var selectedColorInt by remember { mutableIntStateOf(prefs.selectedThemeColor) }
 
     // Dialogs
-    var showSetPinDialog by remember { mutableStateOf(false) }
     var showVerifyPinDialog by remember { mutableStateOf(false) }
     var showColorDialog by remember { mutableStateOf(false) }
     var showSecurityErrorDialog by remember { mutableStateOf(false) }
@@ -110,10 +113,29 @@ fun SettingsScreen(viewModel: SigilViewModel) {
     var showResetSettingsDialog by remember { mutableStateOf(false) }
     var showWipeDataDialog by remember { mutableStateOf(false) }
 
+    // --- LOCK SETUP STATE MACHINE ---
+    var isSetupFlowActive by remember { mutableStateOf(false) }
+    var setupStep by remember { mutableIntStateOf(0) }
+    var tempSecret by remember { mutableStateOf("") }
+    var selectedLockType by remember { mutableStateOf(LockType.PIN) }
     var isSavingPin by remember { mutableStateOf(false) }
 
     // Used to queue the target lock mode after PIN is set
     var pendingLockMode by remember { mutableStateOf<LockMode?>(null) }
+
+    // Helper to reset setup state
+    val cleanupSetup: (Boolean) -> Unit = { success ->
+        isSetupFlowActive = false
+        setupStep = 0
+        tempSecret = ""
+        pendingLockMode = null
+        isSavingPin = false
+
+        if (!success && !viewModel.hasAppLockSet()) {
+            lockMode = LockMode.NONE
+            viewModel.setLockMode(LockMode.NONE)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -171,7 +193,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Global defaults. Profiles may override this.",
+                        text = "Global defaults (overridable by profiles). These settings must match exactly for encryption and decryption; modify only if you know exactly what you’re doing.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Medium
@@ -183,7 +205,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 // Iterations
                 val iterVal = kdfIterations.roundToInt()
                 val iterLabel = when (iterVal) {
-                    10 -> "(Default)"
+                    10 -> DEFAULT_LABEL
                     in 1..5 -> "(Fast/Weak)"
                     in 25..32 -> "(Max)"
                     else -> ""
@@ -200,7 +222,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
                 val memoryMb = (1 shl kdfMemory.toInt()) / 1024
                 val memLabel = when (memoryMb) {
-                    64 -> "(Default)"
+                    64 -> DEFAULT_LABEL
                     256 -> "(Max)"
                     else -> ""
                 }
@@ -226,7 +248,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
 
                 // Parallelism
                 val paraVal = kdfParallelism.roundToInt()
-                val paraLabel = if (paraVal == 4) "(Default)" else ""
+                val paraLabel = if (paraVal == 4) DEFAULT_LABEL else ""
                 Text("Parallelism: $paraVal Threads $paraLabel", fontWeight = FontWeight.Bold)
                 Slider(
                     value = kdfParallelism,
@@ -285,12 +307,13 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                     checked = lockMode != LockMode.NONE,
                     onCheckedChange = { enabled ->
                         if (enabled) {
-                            if (viewModel.hasSecurityPinSet()) {
+                            if (viewModel.hasAppLockSet()) {
                                 lockMode = LockMode.CUSTOM
                                 viewModel.setLockMode(LockMode.CUSTOM)
                             } else {
                                 pendingLockMode = LockMode.CUSTOM
-                                showSetPinDialog = true
+                                isSetupFlowActive = true
+                                setupStep = 0
                             }
                         } else {
                             lockMode = LockMode.NONE
@@ -305,26 +328,28 @@ fun SettingsScreen(viewModel: SigilViewModel) {
             Column {
                 Spacer(Modifier.height(12.dp))
                 SigilSegmentedControl(
-                    items = listOf("Device Biometrics", "Custom PIN"),
+                    items = listOf("Device Biometrics", "Custom Lock"),
                     selectedIndex = if (lockMode == LockMode.CUSTOM) 1 else 0,
                     onItemSelection = { index ->
                         if (index == 0) {
                             if (!BiometricHelper.isDeviceSecure(context)) {
                                 showSecurityErrorDialog = true
-                            } else if (!viewModel.hasSecurityPinSet()) {
+                            } else if (!viewModel.hasAppLockSet()) {
                                 pendingLockMode = LockMode.DEVICE
-                                showSetPinDialog = true
+                                isSetupFlowActive = true
+                                setupStep = 0
                             } else {
                                 lockMode = LockMode.DEVICE
                                 viewModel.setLockMode(LockMode.DEVICE)
                             }
                         } else {
-                            if (viewModel.hasSecurityPinSet()) {
+                            if (viewModel.hasAppLockSet()) {
                                 lockMode = LockMode.CUSTOM
                                 viewModel.setLockMode(LockMode.CUSTOM)
                             } else {
                                 pendingLockMode = LockMode.CUSTOM
-                                showSetPinDialog = true
+                                isSetupFlowActive = true
+                                setupStep = 0
                             }
                         }
                     },
@@ -340,22 +365,23 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 ) {
                     Icon(Icons.Default.VerifiedUser, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Verify My PIN")
+                    Text("Verify My Secret")
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(2.dp))
 
                 TextButton(
                     onClick = {
                         pendingLockMode = lockMode
-                        showSetPinDialog = true
+                        isSetupFlowActive = true
+                        setupStep = 0
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Change PIN")
+                    Text("Change Lock Secret")
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
             }
         }
 
@@ -408,14 +434,24 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 Spacer(Modifier.height(12.dp))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).clickable { showColorDialog = true }.padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .clickable { showColorDialog = true }
+                        .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("Accent Color", fontWeight = FontWeight.Medium)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("#${Integer.toHexString(selectedColorInt).uppercase().takeLast(6)}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(12.dp))
-                        Box(Modifier.size(24.dp).clip(CircleShape).background(Color(selectedColorInt)).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
+                        Box(
+                            Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(selectedColorInt))
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -475,81 +511,235 @@ fun SettingsScreen(viewModel: SigilViewModel) {
         )
     }
 
-    if (showSetPinDialog) {
-        var pinInput by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = {
-                if(!isSavingPin) {
-                    showSetPinDialog = false
-                    pendingLockMode = null
-                }
-            },
-            icon = { Icon(Icons.Default.Lock, null) },
-            title = { Text("Set Custom PIN") },
-            text = {
-                Column {
-                    Text("Enter a PIN to lock Sigil.\nThis will be required if Biometrics fail.")
-                    Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = pinInput,
-                        onValueChange = { if (it.length <= 12) pinInput = it },
-                        label = { Text("PIN") },
-                        singleLine = true,
-                        enabled = !isSavingPin,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (pinInput.isNotEmpty()) {
-                            isSavingPin = true
-                            viewModel.setCustomPin(pinInput)
+    // --- LOCK SETUP FLOW  ---
+    if (isSetupFlowActive) {
+        val centerText = Modifier.fillMaxWidth()
+        val centerAlign = androidx.compose.ui.text.style.TextAlign.Center
 
-                            val newMode = pendingLockMode ?: LockMode.CUSTOM
-                            lockMode = newMode
-                            viewModel.setLockMode(newMode)
+        when (setupStep) {
+            0 -> { // STEP 0: TYPE SELECTION
+                androidx.compose.ui.window.Dialog(onDismissRequest = { cleanupSetup(false) }) {
+                    Surface(
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        tonalElevation = 6.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = "Choose Lock Type",
+                                style = MaterialTheme.typography.headlineSmall,
+                                textAlign = centerAlign
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = "How do you want to secure Sigil?",
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = centerAlign
+                            )
 
-                            showSetPinDialog = false
-                            isSavingPin = false
-                            pendingLockMode = null
+                            Spacer(Modifier.height(24.dp))
+
+                            OutlinedButton(
+                                onClick = {
+                                    selectedLockType = LockType.PIN
+                                    setupStep = 1
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Pin, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Numeric PIN")
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            OutlinedButton(
+                                onClick = {
+                                    selectedLockType = LockType.PASSWORD
+                                    setupStep = 1
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Password, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Alphanumeric Password")
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            TextButton(
+                                onClick = { cleanupSetup(false) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ) {
+                                Text("Cancel")
+                            }
                         }
-                    },
-                    enabled = !isSavingPin
-                ) {
-                    if (isSavingPin) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Set PIN")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showSetPinDialog = false
-                        pendingLockMode = null
-                        if (!viewModel.hasSecurityPinSet()) {
-                            lockMode = LockMode.NONE
-                            viewModel.setLockMode(LockMode.NONE)
-                        }
-                    },
-                    enabled = !isSavingPin
-                ) { Text("Cancel") }
             }
-        )
+            1 -> { // STEP 1: CREATE INPUT
+                var firstInput by remember { mutableStateOf("") }
+                AlertDialog(
+                    onDismissRequest = { cleanupSetup(false) },
+                    icon = { Icon(Icons.Default.Lock, null) },
+                    title = {
+                        Text(
+                            text = if (selectedLockType == LockType.PIN) "Create PIN" else "Create Password",
+                            modifier = centerText,
+                            textAlign = centerAlign
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Enter your new secret.",
+                                textAlign = centerAlign,
+                                modifier = centerText
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            OutlinedTextField(
+                                value = firstInput,
+                                onValueChange = { input ->
+                                    firstInput = if (selectedLockType == LockType.PIN) input.filter { it.isDigit() } else input
+                                },
+                                label = { Text("Enter Secret") },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = if (selectedLockType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (firstInput.isNotEmpty()) {
+                                    tempSecret = firstInput
+                                    setupStep = 2
+                                }
+                            },
+                            enabled = firstInput.isNotEmpty()
+                        ) { Text("Next") }
+                    },
+                    dismissButton = { TextButton(onClick = { cleanupSetup(false) }) { Text("Cancel") } }
+                )
+            }
+            2 -> { // STEP 2: CONFIRMATION
+                var confirmInput by remember { mutableStateOf("") }
+                var error by remember { mutableStateOf(false) }
+
+                AlertDialog(
+                    onDismissRequest = { cleanupSetup(false) },
+                    icon = { Icon(Icons.Default.VerifiedUser, null) },
+                    title = {
+                        Text(
+                            text = "Confirm Secret",
+                            modifier = centerText,
+                            textAlign = centerAlign
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Re-enter to confirm.",
+                                textAlign = centerAlign,
+                                modifier = centerText
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            OutlinedTextField(
+                                value = confirmInput,
+                                onValueChange = { input ->
+                                    confirmInput = if (selectedLockType == LockType.PIN) input.filter { it.isDigit() } else input
+                                    error = false
+                                },
+                                label = { Text("Confirm Secret") },
+                                singleLine = true,
+                                isError = error,
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = if (selectedLockType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (error) {
+                                Text(
+                                    "Secrets do not match.",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .fillMaxWidth(),
+                                    textAlign = centerAlign
+                                )
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (confirmInput == tempSecret) {
+                                    isSavingPin = true
+                                    viewModel.setAppLock(tempSecret, selectedLockType) { success ->
+                                        if (success) {
+                                            val newMode = pendingLockMode ?: LockMode.CUSTOM
+                                            lockMode = newMode
+                                            viewModel.setLockMode(newMode)
+                                            cleanupSetup(true)
+                                        } else {
+                                            isSavingPin = false
+                                        }
+                                    }
+                                } else {
+                                    error = true
+                                }
+                            },
+                            enabled = !isSavingPin
+                        ) {
+                            if (isSavingPin) CircularProgressIndicator(Modifier.size(16.dp)) else Text("Confirm & Save")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { cleanupSetup(false) }, enabled = !isSavingPin) { Text("Cancel") }
+                    }
+                )
+            }
+        }
     }
 
     if (showVerifyPinDialog) {
         var testInput by remember { mutableStateOf("") }
         var verificationResult by remember { mutableStateOf<Boolean?>(null) }
         var isVerifying by remember { mutableStateOf(false) }
+        val inputType = prefs.lockType
 
         AlertDialog(
             onDismissRequest = { showVerifyPinDialog = false },
             icon = { Icon(Icons.Default.VerifiedUser, null) },
-            title = { Text("Verify PIN") },
+            title = { Text("Verify Secret") },
             text = {
                 Column {
-                    Text("Type your PIN to check if it matches.")
+                    Text("Type your current secret to verify.")
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
                         value = testInput,
@@ -557,10 +747,12 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                             testInput = it
                             verificationResult = null
                         },
-                        label = { Text("Enter PIN") },
+                        label = { Text("Enter Secret") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (inputType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
+                        )
                     )
 
                     if (verificationResult != null) {
@@ -581,7 +773,7 @@ fun SettingsScreen(viewModel: SigilViewModel) {
                 Button(
                     onClick = {
                         isVerifying = true
-                        viewModel.verifyAppPin(testInput) { isValid ->
+                        viewModel.verifyAppSecret(testInput) { isValid ->
                             isVerifying = false
                             verificationResult = isValid
                         }
@@ -841,25 +1033,26 @@ fun AdvancedColorPickerDialog(
     fun updateFromHex(hex: String) {
         try {
             if (hex.length == 6) {
-                // Fix: Use KTX toColorInt for cleaner logic
                 val color = Color("#$hex".toColorInt())
                 currentColor = color
                 android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
                 updateInputs(color)
             }
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            // Ignore invalid hex input while typing
+        }
     }
 
     fun updateFromRGB(r: String, g: String, b: String) {
-        try {
-            val ri = r.toIntOrNull() ?: 0
-            val gi = g.toIntOrNull() ?: 0
-            val bi = b.toIntOrNull() ?: 0
-            val color = Color(ri.coerceIn(0,255), gi.coerceIn(0,255), bi.coerceIn(0,255))
-            currentColor = color
-            hexInput = Integer.toHexString(color.toArgb()).uppercase().takeLast(6)
-            android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
-        } catch (_: Exception) { }
+        // Safe parsing with defaults; no try-catch needed
+        val ri = r.toIntOrNull() ?: 0
+        val gi = g.toIntOrNull() ?: 0
+        val bi = b.toIntOrNull() ?: 0
+
+        val color = Color(ri.coerceIn(0, 255), gi.coerceIn(0, 255), bi.coerceIn(0, 255))
+        currentColor = color
+        hexInput = Integer.toHexString(color.toArgb()).uppercase().takeLast(6)
+        android.graphics.Color.colorToHSV(color.toArgb(), hsv.value)
     }
 
     AlertDialog(

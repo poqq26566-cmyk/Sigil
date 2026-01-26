@@ -100,6 +100,7 @@ object BiometricHelper {
     // --- UI ---
     fun showPrompt(
         activity: FragmentActivity,
+        negativeButtonText: String,
         onSuccess: (BiometricPrompt.CryptoObject?) -> Unit,
         onFailure: () -> Unit,
         onError: (String) -> Unit
@@ -109,7 +110,7 @@ object BiometricHelper {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Sigil Security")
             .setSubtitle("Identity Verification Required")
-            .setNegativeButtonText("Use Sigil PIN")
+            .setNegativeButtonText(negativeButtonText)
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .setConfirmationRequired(true)
             .build()
@@ -123,7 +124,7 @@ object BiometricHelper {
                 when (errorCode) {
                     BiometricPrompt.ERROR_USER_CANCELED,
                     BiometricPrompt.ERROR_NEGATIVE_BUTTON -> onFailure()
-                    BiometricPrompt.ERROR_LOCKOUT -> onError("Too many attempts. Use PIN.")
+                    BiometricPrompt.ERROR_LOCKOUT -> onError("Too many attempts. Use Passcode.")
                     else -> onError(errString.toString())
                 }
             }

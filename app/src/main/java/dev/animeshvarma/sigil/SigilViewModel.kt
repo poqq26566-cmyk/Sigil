@@ -22,6 +22,7 @@ import dev.animeshvarma.sigil.model.AppScreen
 import dev.animeshvarma.sigil.model.EncryptionProfile
 import dev.animeshvarma.sigil.model.LayerEntry
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.model.ProfileRegistry
 import dev.animeshvarma.sigil.model.SigilMode
 import dev.animeshvarma.sigil.model.UiState
@@ -812,25 +813,57 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         prefs.lockMode = mode
     }
 
-    fun setCustomPin(pin: String) {
+    /**
+     * Sets the application lock (PIN or Password) using the LockManager.
+     * This replaces the old setCustomPin method.
+     *
+     * @param secret The plaintext secret (PIN or Password).
+     * @param type The type of lock (used to determine keyboard layout on LockScreen).
+     * @param onResult Callback indicating success or failure.
+     */
+    fun setAppLock(secret: String, type: LockType, onResult: (Boolean) -> Unit) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            lockManager.setCustomPin(pin)
-            delay(500)
+            var success = false
+            try {
+                lockManager.setAppLock(secret, type)
 
-            withContext(Dispatchers.Main) {
-                addLog("Custom Security PIN set (TEE Encrypted).")
+                delay(500)
+
+                withContext(Dispatchers.Main) {
+                    addLog("App secret set (TEE Encrypted).")
+                    addLog("App Lock enabled (${type.name}).")
+                }
+                success = true
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    addLog("Error: Failed to enable App Lock.")
+                }
+                success = false
+            } finally {
                 _uiState.update { it.copy(isLoading = false) }
+                withContext(Dispatchers.Main) {
+                    onResult(success)
+                }
             }
         }
     }
 
-    fun verifyAppPin(input: String, onResult: (Boolean) -> Unit) {
+    /**
+     * Verifies the provided input against the stored Argon2 hash.
+     * Renamed from verifyAppPin to verifyAppSecret to support Passwords.
+     */
+    fun verifyAppSecret(input: String, onResult: (Boolean) -> Unit) {
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch(Dispatchers.IO) {
-            val isValid = lockManager.verifyPin(input)
+            val isValid = try {
+                lockManager.verifySecret(input)
+            } catch (_: Exception) {
+                addLog("Error: App lock verification failed.")
+                false
+            }
 
             if (!isValid) delay(1000)
 
@@ -841,7 +874,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
 
     /**
      * Performs a full application data wipe and restarts the app.
@@ -928,8 +960,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPrefs() = prefs
 
-    fun hasSecurityPinSet(): Boolean {
-        return lockManager.hasPinSet()
+    fun hasAppLockSet(): Boolean {
+        return lockManager.hasAppLockSet()
     }
 
     /**
