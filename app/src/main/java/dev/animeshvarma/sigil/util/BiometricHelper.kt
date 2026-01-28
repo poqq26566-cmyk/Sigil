@@ -108,7 +108,7 @@ object BiometricHelper {
         val executor = ContextCompat.getMainExecutor(activity)
 
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Sigil Security")
+            .setTitle("Unlock Sigil")
             .setSubtitle("Identity Verification Required")
             .setNegativeButtonText(negativeButtonText)
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
