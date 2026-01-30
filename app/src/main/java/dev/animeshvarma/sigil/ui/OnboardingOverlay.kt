@@ -198,12 +198,10 @@ fun OnboardingOrchestrator(
             }
             OnboardingState.BASIC_INPUT -> viewModel.injectDemoData(DEMO_LOREM, "", "")
             OnboardingState.BASIC_PASS -> viewModel.injectDemoData(DEMO_LOREM, "BlueHorse", "")
-            OnboardingState.BASIC_ENCRYPT_DONE -> viewModel.onEncrypt()
             OnboardingState.DECRYPT_PREP -> {
                 val output = viewModel.uiState.value.autoOutput
                 viewModel.injectDemoData(output, "BlueHorse", "")
             }
-            OnboardingState.DECRYPT_DONE -> viewModel.onDecrypt()
             OnboardingState.DRAWER_SHOW -> {
                 viewModel.onScreenSelected(AppScreen.HOME)
                 delay(300)
@@ -264,8 +262,11 @@ fun OnboardingOrchestrator(
                 Box(modifier = Modifier.fillMaxSize().clickable(enabled = true, onClick = {}))
 
                 PromptOverlay(state = state) {
-                    if (state == OnboardingState.DRAWER_SHOW) {
-                        viewModel.toggleDemoDrawer(false)
+                    when (state) {
+                        OnboardingState.BASIC_ENCRYPT_WAIT -> viewModel.onEncrypt()
+                        OnboardingState.DECRYPT_WAIT -> viewModel.onDecrypt()
+                        OnboardingState.DRAWER_SHOW -> viewModel.toggleDemoDrawer(false)
+                        else -> {}
                     }
                     state = state.config.next
                 }

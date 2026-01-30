@@ -65,7 +65,7 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 
 ## Features
 
-- **Encryption Profiles (New):** Switch between "Raw Mode" (Standard encryption compatibility for any algo), the classic "Sigil Chain", or create your own chain!
+- **Encryption Profiles (New):** Switch between **Standard AES** (a built‑in profile that uses Raw Mode), the classic **Sigil Chain**, or create your own chain.
 - **Multi-Layer Cascade:** By default, Sigil encrypts your data with the "Sigil Chain" profile (`XChaCha20` → `Serpent` → `Twofish` → `AES-256`). For typical text inputs, the KDF dominates execution time, making the multi-layer overhead negligible; however, larger data [>2 MB] will show linear scaling with layer count.
 - **Zero-Knowledge Auth:** Support for both **PINs** and **Passwords**. Authentication is handled via salted Argon2id hashes. Credentials are never stored in a reversible format.
 - **Hardware-Backed Keystore:** Master seeds are generated and stored inside your phone's **Trusted Execution Environment (TEE)**. They never touch the app layer in plaintext.
@@ -78,9 +78,11 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 ## How It Works
 
 ### **Key Derivation (Argon2id)**
+
 Sigil uses Argon2id as the primary KDF. It's memory-hard, which means it forces the device to use a chunk of RAM (up to 256MB) to unlock. This makes it incredibly annoying/expensive for attackers with GPUs to try and brute-force your password.
 
 ### **Encryption Profiles & Raw Mode**
+
 Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the complexity of their encryption once and reuse it:
 
 1.  **Sigil Chain (Default):** The classic hybrid cascade designed for maximum defense depth. It wraps data in a custom container with metadata headers, compression, and KDF salts.
@@ -94,14 +96,17 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 ## Implemented Modules
 
 ### **Encryption (Auto & Custom)**
+
 - **Auto Tab:** Quickly encrypt your text using Saved Profiles (Custom Chains) and Built-in ones.
 - **Custom Tab:** A layer manager allowing users to select specific algorithms from the registry, reorder the cascade, and toggle ZLib compression among other things. This is also where you save new profiles.
 
 ### **Keystore**
+
 - A manager for your saved keys. Sigil only decrypts these from the hardware vault when you successfully authenticate.
 - Includes an **Entropy Meter** to show you how strong your key actually is.
 
 ### **Settings**
+
 - **Cryptography Tuning:** Tweak the Argon2id parameters (Iterations, Memory, Parallelism).
 - **App Lock:** A new wizard to set up your PIN or Password safely.
 - **Privacy:** Controls for Screen Security, Grace Periods, and clipboard auto-wipe.
