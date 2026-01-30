@@ -175,7 +175,8 @@ class MainActivity : AppCompatActivity() {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText ->
                 intent.removeExtra(Intent.EXTRA_TEXT)
 
-                if (isContentHidden.value || prefs.lockMode != LockMode.NONE) {
+                val shouldDefer = isContentHidden.value || lockManager.isAppLocked()
+                if (shouldDefer) {
                     viewModel.cachePendingIntent(sharedText)
                     isContentHidden.value = true
                 } else {

@@ -429,8 +429,9 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
                             },
                             onDuplicateName = { existing ->
                                 showSaveProfileDialog = false
+                                pendingSaveData = PendingProfileData(name, desc, kdfOverride, isRaw)
                                 showOverwriteDialog = existing
-                            }
+                                }
                         )
                     }
                 }
@@ -520,15 +521,19 @@ fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
             confirmButton = {
                 Button(
                     onClick = {
+                        val data = pendingSaveData
                         val updated = existing.copy(
-                            description = "Updated via Custom Mode",
+                            name = data?.name ?: existing.name,
+                            description = data?.desc ?: existing.description,
                             layers = uiState.customLayers.map { it.algorithm },
-                            isCompressionEnabled = uiState.isCompressionEnabled,
-                            // Preserve existing raw/kdf flags if overwriting via quick-update
+                            kdfConfig = data?.kdf ?: existing.kdfConfig,
+                            isRaw = data?.isRaw ?: existing.isRaw,
+                            isCompressionEnabled = uiState.isCompressionEnabled
                         )
                         viewModel.overwriteProfile(updated)
                         showOverwriteDialog = null
                         viewModel.onModeSelected(SigilMode.AUTO)
+                        pendingSaveData = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Overwrite") }

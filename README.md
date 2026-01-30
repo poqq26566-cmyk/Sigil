@@ -87,8 +87,8 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 1.  **Sigil Chain (Default):** The classic hybrid cascade designed for maximum defense depth. It wraps data in a custom container with metadata headers, compression, and KDF salts.
     *   *Layers:* `XChaCha20-Poly1305` → `Serpent-CBC` → `Twofish-CBC` → `AES-256-GCM`.
-2.  **Standard AES:** For users who prefer a minimal attack surface or require compatibility with external tools (e.g., OpenSSL). This mode bypasses the multi-cipher chain and metadata headers, outputting pure ciphertext/IV/tag.
-    *   *Flexibility:* You may use **any** algorithm from the registry (AES-GCM, XChaCha20, etc.) in Raw Mode, not just AES, by creating a new profile in Custom Mode and checking the RAW mode box (only available if a single algorithm is selected).
+2.  **Standard AES:** A pre-configured profile using **Raw Mode** with AES-GCM. Raw Mode bypasses the multi-cipher chain and metadata headers, outputting pure ciphertext/IV/tag. This is ideal for users who prefer a minimal attack surface or require compatibility with external tools.  
+    *   *Flexibility:* You may use **any** algorithm from the registry (AES-GCM, XChaCha20, etc.) in Raw Mode by creating a new profile in Custom Mode and checking the RAW mode box (only available if a single algorithm is selected).
 3.  **Custom Profiles:** Define your own cryptographic chain. Select from the registry of 20+ algorithms to create a bespoke encryption pipeline suited to your specific threat model. You can also override global KDF settings per profile if required (even though global settings are tweakable in the settings tab).
 
 ---

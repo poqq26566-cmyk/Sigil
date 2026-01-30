@@ -38,13 +38,13 @@ import dev.animeshvarma.sigil.util.BiometricHelper
 /**
  * Render the Sigil lock screen and manage PIN and biometric authentication flows.
  *
- * This composable displays either a PIN entry UI or a biometric unlock button depending on
+ * This composable displays either a PIN/password entry UI or a biometric unlock button depending on
  * the configured lock mode and runtime state, verifies PIN via the provided ViewModel,
  * triggers biometric prompts (including automatic prompt on lifecycle resume when applicable),
  * and shows dialogs for biometric invalidation and emergency reset. On successful authentication
  * it invokes the provided unlock callback.
  *
- * @param viewModel The SigilViewModel used to read preferences, verify the app PIN, and perform data wipe.
+ * @param viewModel The SigilViewModel used to read preferences, verify the app secret, and perform data wipe.
  * @param onUnlock Callback invoked when authentication succeeds (PIN verified or biometric success).
  */
 @Composable
@@ -186,6 +186,7 @@ fun LockScreen(
                     keyboardActions = KeyboardActions(
                         onGo = {
                             keyboardController?.hide()
+                            if (uiState.isLoading) return@KeyboardActions
                             if (pinInput.isNotEmpty()) {
                                 viewModel.verifyAppSecret(pinInput) { isValid ->
                                     if (isValid) {

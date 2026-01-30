@@ -110,7 +110,7 @@ object BiometricHelper {
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Sigil")
             .setSubtitle("Identity Verification Required")
-            .setNegativeButtonText(negativeButtonText)
+            .setNegativeButtonText(negativeButtonText.ifBlank { "Use Sigil Passcode" })
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .setConfirmationRequired(true)
             .build()

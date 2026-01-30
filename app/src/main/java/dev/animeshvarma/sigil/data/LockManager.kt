@@ -80,6 +80,7 @@ class LockManager(context: Context) {
         } finally {
             // 5. Cleanup memory
             SecureMemory.wipe(secretChars)
+            SecureMemory.wipe(salt)
         }
     }
 
@@ -104,13 +105,18 @@ class LockManager(context: Context) {
                 BiometricHelper.resetBiometrics()
             }
 
+            // 4a. Wipe intermediate secrets
+            SecureMemory.wipe(inputHash)
+
             isMatch
 
         } catch (_: Exception) {
             false
         } finally {
-            // 4. Wipe Input Memory
+            // 4b. Wipe Input Memory
             SecureMemory.wipe(inputChars)
+            SecureMemory.wipe(salt)
+            SecureMemory.wipe(storedHash)
         }
     }
 

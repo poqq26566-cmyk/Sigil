@@ -92,6 +92,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
 
         val savedId = prefs.activeProfileId
         val active = allProfiles.find { it.id == savedId } ?: ProfileRegistry.defaultProfile
+        if (savedId != active.id) {
+            prefs.activeProfileId = active.id
+            }
 
         _uiState.update {
             it.copy(
