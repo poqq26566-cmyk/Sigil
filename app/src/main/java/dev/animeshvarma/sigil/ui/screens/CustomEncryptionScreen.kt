@@ -846,7 +846,8 @@ fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
                         items = filteredAlgos,
                         key = { it.id }
                     ) { algoData ->
-                        val engineEnum = CryptoEngine.Algorithm.valueOf(algoData.id)
+                        val engineEnum = runCatching { CryptoEngine.Algorithm.valueOf(algoData.id) }.getOrNull()
+                            ?: return@items // Skip unknown algorithms
                         val isSelected = selectedAlgos.contains(engineEnum)
                         val isWeak = algoData.isWeak
                         val containerColor = when {

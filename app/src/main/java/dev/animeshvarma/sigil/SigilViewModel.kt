@@ -200,7 +200,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         kdfOverride: CryptoEngine.KdfConfig?,
         compress: Boolean,
         isRaw: Boolean,
-        onSuccess: () -> Unit
+        onSuccess: () -> Unit,
+        onNameCollision: () -> Unit = {}
     ) {
         if (name.isBlank()) {
             addLog("Error: Profile name required.")
@@ -219,6 +220,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             val collision = currentCustom.any { it.id != id && it.name.equals(name, ignoreCase = true) }
             if (collision) {
                 addLog("Error: Profile name '$name' is already taken.")
+                onNameCollision()
                 return
             }
 
@@ -273,10 +275,6 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         if (currentCustom.removeIf { it.id == profileId }) {
             prefs.saveCustomProfiles(currentCustom)
             loadProfiles()
-            // Fallback to default if deleted was active
-            if (_uiState.value.activeProfile.id == profileId) {
-                selectProfile(ProfileRegistry.defaultProfile)
-            }
             addLog("Profile Deleted.")
         }
     }
@@ -528,9 +526,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                         logCallback = { addLog(it) }
                     )
                 }
-
+                val wasAutoMode = state.selectedMode == SigilMode.AUTO
                 _uiState.update {
-                    if (it.selectedMode == SigilMode.AUTO) it.copy(autoOutput = result, isLoading = false)
+                    if (wasAutoMode) it.copy(autoOutput = result, isLoading = false)
                     else it.copy(customOutput = result, isLoading = false)
                 }
             } catch (_: Exception) {
@@ -831,9 +829,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             var success = false
             try {
                 lockManager.setAppLock(secret, type)
-
-                delay(500)
-
+                
                 withContext(Dispatchers.Main) {
                     addLog("App secret set (TEE Encrypted).")
                     addLog("App Lock enabled (${type.name}).")
@@ -1020,7 +1016,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("Clipboard auto-wiped.")
                 }
             } catch (_: Exception) {
+                // Clipboard may have been cleared externally or access denied
             }
+
         }
     }
 }

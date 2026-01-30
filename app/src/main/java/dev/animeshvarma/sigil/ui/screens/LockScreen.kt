@@ -94,8 +94,11 @@ fun LockScreen(
         }
     }
 
+    var biometricInvalidated by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         if (BiometricHelper.hasBiometricChanged()) {
+            biometricInvalidated = true
             showBiometricInvalidatedDialog = true
             isPinFallback = true
         }
@@ -105,6 +108,7 @@ fun LockScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (BiometricHelper.hasBiometricChanged()) {
+                    biometricInvalidated = true
                     showBiometricInvalidatedDialog = true
                     isPinFallback = true
                     return@LifecycleEventObserver
@@ -246,7 +250,7 @@ fun LockScreen(
                 }
 
                 // Retry Biometrics Button (Only if valid)
-                if (lockMode == LockMode.DEVICE && isPinFallback && !BiometricHelper.hasBiometricChanged()) {
+                if (lockMode == LockMode.DEVICE && isPinFallback && !biometricInvalidated) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(onClick = { triggerBiometric() }) {
                         Icon(Icons.Default.Fingerprint, null, Modifier.size(16.dp))

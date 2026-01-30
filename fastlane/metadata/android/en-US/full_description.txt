@@ -19,7 +19,7 @@ The application operates entirely offline, performing all cryptographic operatio
 **Advanced User Toolkit**
 
 *   **Secure Keystore:** Save, view, and manage encryption keys using the hardware-backed vault.
-*   **Custom Encryption Control:** Full manual control over encryption chains. Build your own cascade from 20+ algorithms, reorder layers, and toggle ZLib compression.
+*   **Custom Encryption Control:** Full manual control over encryption chains. Build your own cascade from 18 algorithms, reorder layers, and toggle ZLib compression.
 *   **System Console:** Real-time logging of the encryption process, providing precise timing metrics and error diagnostics.
 *   **Advanced Theming:** Material You Dynamic Colors, Dark/Light modes, and a custom HSV color engine.
 

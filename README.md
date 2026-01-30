@@ -89,7 +89,7 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
     *   *Layers:* `XChaCha20-Poly1305` → `Serpent-CBC` → `Twofish-CBC` → `AES-256-GCM`.
 2.  **Standard AES:** A pre-configured profile using **Raw Mode** with AES-GCM. Raw Mode bypasses the multi-cipher chain and metadata headers, outputting pure ciphertext/IV/tag. This is ideal for users who prefer a minimal attack surface or require compatibility with external tools.  
     *   *Flexibility:* You may use **any** algorithm from the registry (AES-GCM, XChaCha20, etc.) in Raw Mode by creating a new profile in Custom Mode and checking the RAW mode box (only available if a single algorithm is selected).
-3.  **Custom Profiles:** Define your own cryptographic chain. Select from the registry of 20+ algorithms to create a bespoke encryption pipeline suited to your specific threat model. You can also override global KDF settings per profile if required (even though global settings are tweakable in the settings tab).
+3.  **Custom Profiles:** Define your own cryptographic chain. Select from the registry of 18 algorithms to create a bespoke encryption pipeline suited to your specific threat model. You can also override global KDF settings per profile if required (even though global settings are tweakable in the settings tab).
 
 ---
 
@@ -137,7 +137,7 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 ## Algorithm Registry
 
-Sigil currently supports **20 cryptographic algorithms**, including modern standards, AES finalists, and some legacy ones (for educational/testing purposes, trigger a UI warning when selected).
+Sigil currently supports **18 cryptographic algorithms**, including modern standards, AES finalists, and some legacy ones (for educational/testing purposes, trigger a UI warning when selected).
 
 | Algorithm              | Type          | Block Size | Origin/Standard             | Status           |
 |:-----------------------|:--------------|:-----------|:----------------------------|:-----------------|
