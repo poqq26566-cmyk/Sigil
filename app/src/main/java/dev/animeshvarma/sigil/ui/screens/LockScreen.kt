@@ -21,16 +21,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dev.animeshvarma.sigil.SigilViewModel
 import dev.animeshvarma.sigil.model.LockMode
+import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.util.BiometricHelper
 
+/**
+ * Render the Sigil lock screen and manage PIN and biometric authentication flows.
+ *
+ * This composable displays either a PIN/password entry UI or a biometric unlock button depending on
+ * the configured lock mode and runtime state, verifies PIN via the provided ViewModel,
+ * triggers biometric prompts (including automatic prompt on lifecycle resume when applicable),
+ * and shows dialogs for biometric invalidation and emergency reset. On successful authentication
+ * it invokes the provided unlock callback.
+ *
+ * @param viewModel The SigilViewModel used to read preferences, verify the app secret, and perform data wipe.
+ * @param onUnlock Callback invoked when authentication succeeds (PIN verified or biometric success).
+ */
 @Composable
 fun LockScreen(
     viewModel: SigilViewModel,
@@ -38,25 +54,32 @@ fun LockScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val prefs = viewModel.getPrefs()
     val uiState by viewModel.uiState.collectAsState()
 
     val lockMode = prefs.lockMode
+    val lockType = prefs.lockType
+
+    val incorrectAuthText = if (lockType == LockType.PIN) "Incorrect PIN" else "Incorrect Password"
 
     var pinInput by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
-
     var isPinFallback by remember { mutableStateOf(false) }
-
     var showWipeDialog by remember { mutableStateOf(false) }
-
     var showBiometricInvalidatedDialog by remember { mutableStateOf(false) }
 
+    // Helper to trigger bio
     fun triggerBiometric() {
         if (context is FragmentActivity) {
+            val currentLockType = prefs.lockType
+            val negativeText = if (currentLockType == LockType.PIN) "Use Sigil PIN" else "Use Sigil Password"
+
             BiometricHelper.showPrompt(
                 activity = context,
+                negativeButtonText = negativeText,
                 onSuccess = { _ -> onUnlock() },
                 onFailure = {
                     isPinFallback = true
@@ -71,13 +94,37 @@ fun LockScreen(
         }
     }
 
+    var biometricInvalidated by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         if (BiometricHelper.hasBiometricChanged()) {
+            biometricInvalidated = true
             showBiometricInvalidatedDialog = true
             isPinFallback = true
         }
-        else if (lockMode == LockMode.DEVICE) {
-            triggerBiometric()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (BiometricHelper.hasBiometricChanged()) {
+                    biometricInvalidated = true
+                    showBiometricInvalidatedDialog = true
+                    isPinFallback = true
+                    return@LifecycleEventObserver
+                }
+
+                if (lockMode == LockMode.DEVICE &&
+                    !showBiometricInvalidatedDialog &&
+                    !isPinFallback
+                ) {
+                    triggerBiometric()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -120,6 +167,9 @@ fun LockScreen(
             Spacer(Modifier.height(48.dp))
 
             if (lockMode == LockMode.CUSTOM || isPinFallback || showBiometricInvalidatedDialog) {
+                val kbType = if (lockType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
+                val labelText = if (lockType == LockType.PIN) "Enter Sigil PIN" else "Enter Password"
+
                 OutlinedTextField(
                     value = pinInput,
                     onValueChange = {
@@ -129,23 +179,25 @@ fun LockScreen(
                             errorMessage = ""
                         }
                     },
-                    label = { Text("Enter Sigil PIN") },
+                    label = { Text(labelText) },
                     singleLine = true,
                     isError = showError,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.NumberPassword,
+                        keyboardType = kbType,
                         imeAction = ImeAction.Go
                     ),
                     keyboardActions = KeyboardActions(
                         onGo = {
+                            keyboardController?.hide()
+                            if (uiState.isLoading) return@KeyboardActions
                             if (pinInput.isNotEmpty()) {
-                                viewModel.verifyAppPin(pinInput) { isValid ->
+                                viewModel.verifyAppSecret(pinInput) { isValid ->
                                     if (isValid) {
                                         onUnlock()
                                     } else {
                                         showError = true
-                                        errorMessage = "Incorrect PIN"
+                                        errorMessage = incorrectAuthText
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         pinInput = ""
                                     }
@@ -159,7 +211,7 @@ fun LockScreen(
 
                 if (showError) {
                     Text(
-                        text = errorMessage.ifEmpty { "Incorrect PIN" },
+                        text = errorMessage.ifEmpty { incorrectAuthText },
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -169,12 +221,14 @@ fun LockScreen(
 
                 Button(
                     onClick = {
-                        viewModel.verifyAppPin(pinInput) { isValid ->
+                        keyboardController?.hide()
+                        if (pinInput.isEmpty()) return@Button
+                        viewModel.verifyAppSecret(pinInput) { isValid ->
                             if (isValid) {
                                 onUnlock()
                             } else {
                                 showError = true
-                                errorMessage = "Incorrect PIN"
+                                errorMessage = incorrectAuthText
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 pinInput = ""
                             }
@@ -182,7 +236,7 @@ fun LockScreen(
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    enabled = !uiState.isLoading
+                    enabled = !uiState.isLoading && pinInput.isNotEmpty()
                 ) {
                     if (uiState.isLoading) {
                         CircularProgressIndicator(
@@ -195,7 +249,8 @@ fun LockScreen(
                     }
                 }
 
-                if (lockMode == LockMode.DEVICE && isPinFallback && !BiometricHelper.hasBiometricChanged()) {
+                // Retry Biometrics Button (Only if valid)
+                if (lockMode == LockMode.DEVICE && isPinFallback && !biometricInvalidated) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(onClick = { triggerBiometric() }) {
                         Icon(Icons.Default.Fingerprint, null, Modifier.size(16.dp))
@@ -205,7 +260,6 @@ fun LockScreen(
                 }
 
             } else {
-                // Biometric Button State
                 Button(
                     onClick = { triggerBiometric() },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -220,7 +274,8 @@ fun LockScreen(
             Spacer(Modifier.height(16.dp))
 
             TextButton(onClick = { showWipeDialog = true }) {
-                Text("Forgot PIN? Reset App", color = MaterialTheme.colorScheme.error)
+                val forgotText = if (lockType == LockType.PIN) "Forgot PIN? Reset App" else "Forgot Password? Reset App"
+                Text(forgotText, color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -229,7 +284,6 @@ fun LockScreen(
     if (showBiometricInvalidatedDialog) {
         AlertDialog(
             onDismissRequest = {
-                showBiometricInvalidatedDialog = false
             },
             icon = {
                 Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.primary)
@@ -238,7 +292,8 @@ fun LockScreen(
                 Text("Security Alert")
             },
             text = {
-                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to PIN authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
+                val authType = if (lockType == LockType.PIN) "PIN" else "password"
+                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to $authType authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
             },
             confirmButton = {
                 TextButton(

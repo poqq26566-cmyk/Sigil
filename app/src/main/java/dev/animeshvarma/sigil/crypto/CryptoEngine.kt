@@ -13,10 +13,12 @@ import org.bouncycastle.crypto.params.AEADParameters
 import org.bouncycastle.crypto.engines.*
 import org.bouncycastle.crypto.modes.CBCBlockCipher
 import org.bouncycastle.crypto.modes.ChaCha20Poly1305
+import org.bouncycastle.crypto.modes.GCMBlockCipher
 import org.bouncycastle.crypto.paddings.PKCS7Padding
 import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.CharBuffer
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
@@ -44,22 +46,39 @@ object CryptoEngine {
     )
 
     enum class Algorithm {
-        AES_GCM, CHACHA20_POLY1305,
+        AES_GCM, CHACHA20_POLY1305, XCHACHA20_POLY1305, ARIA_256_GCM,
         AES_CBC, TWOFISH_CBC, SERPENT_CBC, CAMELLIA_CBC,
         CAST6_CBC, RC6_CBC, SM4_CBC, SEED_CBC,
         BLOWFISH_CBC, IDEA_CBC, CAST5_CBC, TEA_CBC, XTEA_CBC, GOST_CBC
     }
 
-    private fun getBlockSize(algo: Algorithm): Int {
+    fun isAEAD(algo: Algorithm): Boolean {
         return when (algo) {
-            Algorithm.AES_GCM, Algorithm.CHACHA20_POLY1305 -> 12
+            Algorithm.AES_GCM,
+            Algorithm.CHACHA20_POLY1305,
+            Algorithm.XCHACHA20_POLY1305,
+            Algorithm.ARIA_256_GCM -> true
+            else -> false
+        }
+    }
 
-            // 64-bit Block Ciphers (Weak)
+    private fun getIvSize(algo: Algorithm): Int {
+        return when (algo) {
+            Algorithm.AES_GCM, Algorithm.CHACHA20_POLY1305, Algorithm.ARIA_256_GCM -> 12
+            Algorithm.XCHACHA20_POLY1305 -> 24
+
             Algorithm.BLOWFISH_CBC, Algorithm.IDEA_CBC, Algorithm.CAST5_CBC,
             Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.GOST_CBC -> 8
 
-            // Standard 128-bit Block Ciphers
             else -> 16
+        }
+    }
+
+    private fun is64BitBlockCipher(algo: Algorithm): Boolean {
+        return when (algo) {
+            Algorithm.BLOWFISH_CBC, Algorithm.IDEA_CBC, Algorithm.CAST5_CBC,
+            Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.GOST_CBC -> true
+            else -> false
         }
     }
 
@@ -67,11 +86,27 @@ object CryptoEngine {
         return when (algo) {
             Algorithm.SM4_CBC, Algorithm.SEED_CBC, Algorithm.CAST5_CBC,
             Algorithm.IDEA_CBC, Algorithm.TEA_CBC, Algorithm.XTEA_CBC, Algorithm.BLOWFISH_CBC -> 16
-
             else -> 32
         }
     }
 
+    /**
+     * Encrypts a byte array with a layered sequence of authenticated ciphers and returns a compact Base64 string.
+     *
+     * Applies Argon2id-based key derivation from the provided password and a random salt, optionally compresses
+     * the plaintext, encrypts the payload through the given algorithm chain (in order), stores per-layer IVs and
+     * metadata in an AES-GCM-protected header, and appends a global HMAC. The final result is Base64-encoded with
+     * padding removed.
+     *
+     * @param data Plaintext bytes to encrypt (must be ≤ 10 MB).
+     * @param password Password characters used to derive keys; the implementation clears this buffer after use.
+     * @param algorithms Ordered list of algorithms to apply as layered encryption (default: AES_GCM).
+     * @param kdfConfig Argon2id parameters (iterations, memoryPow2, parallelism) used for key derivation.
+     * @param compress If true, compresses the plaintext before encryption.
+     * @param logCallback Optional callback that receives progress, warning, and timing messages.
+     * @return A Base64-encoded string (padding stripped) containing salt, encrypted header, ciphertext, and HMAC.
+     * @throws IllegalArgumentException If input, intermediate pack, or final output sizes exceed configured safety limits.
+     */
     fun encrypt(
         data: ByteArray,
         password: CharArray,
@@ -80,7 +115,7 @@ object CryptoEngine {
         compress: Boolean = true,
         logCallback: (String) -> Unit = {}
     ): String {
-        if (data.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input exceeds 10MB safety limit.")
+        require(data.size <= MAX_DATA_LIMIT) { "Input exceeds 10MB safety limit." }
 
         val startTime = System.currentTimeMillis()
         logCallback("Initializing Secure Chain...")
@@ -91,8 +126,11 @@ object CryptoEngine {
 
         // 2. Root Secret (Argon2id)
         val passBytes = toBytes(password)
-        val rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
-        passBytes.fill(0.toByte())
+        val rootSecret = try {
+            deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
+        } finally {
+            passBytes.fill(0.toByte())
+        }
 
         logCallback("Root Secret derived (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
@@ -113,11 +151,11 @@ object CryptoEngine {
 
         algorithms.forEachIndexed { index, algo ->
             val layerId = index + 1
-            if (getBlockSize(algo) == 8) {
+            if (is64BitBlockCipher(algo)) {
                 logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block - Weak).")
             }
 
-            val ivSize = getBlockSize(algo)
+            val ivSize = getIvSize(algo)
             val iv = ByteArray(ivSize).apply { secureRandom.nextBytes(this) }
             ivListBytes.add(iv)
 
@@ -144,7 +182,7 @@ object CryptoEngine {
 
         // 6. Pack
         val totalSize = 16 + 12 + 4 + encryptedMetadataBytes.size + currentBytes.size
-        if (totalSize > MAX_DATA_LIMIT) throw IllegalArgumentException("Pack size exceeds limit.")
+        require(totalSize <= MAX_DATA_LIMIT) { "Pack size exceeds limit." }
 
         val packBuffer = ByteBuffer.allocate(totalSize)
         packBuffer.put(salt)
@@ -163,7 +201,7 @@ object CryptoEngine {
         val finalBytes = ByteBuffer.allocate(packedBytes.size + hmac.size)
             .put(packedBytes).put(hmac).array()
 
-        if (finalBytes.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Output exceeds limit.")
+        require(finalBytes.size <= MAX_DATA_LIMIT) { "Output exceeds limit." }
 
         logCallback("Global HMAC Signature applied.")
         logCallback("Operation complete in ${System.currentTimeMillis() - startTime}ms.")
@@ -171,6 +209,22 @@ object CryptoEngine {
         return stripPadding(encoder.encodeToString(finalBytes))
     }
 
+    /**
+     * Decrypts a secure container produced by this engine and returns the original plaintext bytes.
+     *
+     * Performs Argon2id key derivation using the provided password and kdfConfig, verifies a global
+     * HMAC to ensure integrity, decrypts the layered cipher sequence stored in the container, and
+     * optionally decompresses the final payload when indicated by the metadata. Sensitive keying
+     * material derived during the operation is cleared from memory before returning.
+     *
+     * @param encryptedData Base64-encoded container string produced by the corresponding encrypt routine.
+     * @param password The password as a mutable CharArray; contents are zeroed after use.
+     * @param kdfConfig Argon2id parameter set used to reconstruct key material.
+     * @return The decrypted plaintext bytes.
+     * @throws IllegalArgumentException If decryption fails for any reason (integrity check, malformed
+     *     input, wrong password, or other errors). The exception message is intentionally generic to
+     *     avoid leaking sensitive information.
+     */
     fun decrypt(
         encryptedData: String,
         password: CharArray,
@@ -204,8 +258,11 @@ object CryptoEngine {
 
             // Reconstruct Root
             val passBytes = toBytes(password)
-            rootSecret = deriveRootSecret(passBytes, salt, kdfConfig)
-            passBytes.fill(0.toByte())
+            rootSecret = try {
+                deriveKeyArgon2(passBytes, salt, kdfConfig, 32)
+            } finally {
+                passBytes.fill(0.toByte())
+            }
             logCallback("Root Secret reconstructed (Argon2id: ${kdfConfig.memoryPow2} pow2 memory, ${kdfConfig.iterations} iterations).")
 
             val macKey = deriveSubKey(rootSecret, salt, "SIGIL_GLOBAL_MAC", 32)
@@ -250,7 +307,7 @@ object CryptoEngine {
                 val iv = decoder.decode(ivStrings[i])
                 val keySize = getKeySize(algo)
 
-                if (getBlockSize(algo) == 8) {
+                if (is64BitBlockCipher(algo)) {
                     logCallback("[WARNING] Layer $layerId uses ${algo.name} (64-bit block - Weak).")
                 }
                 logCallback("Layer $layerId: Decrypting with ${algo.name}...")
@@ -277,7 +334,150 @@ object CryptoEngine {
         }
     }
 
-    // --- SECURE HELPERS ---
+    /**
+     * Encrypts a single byte payload with the specified algorithm and returns a compact raw container.
+     *
+     * The returned container is Base64-encoded and contains, in order: 16-byte salt, IV (algorithm-dependent size),
+     * and the ciphertext produced by the chosen algorithm.
+     *
+     * **SECURITY WARNING:** Unlike the standard [encrypt] method, this function does NOT apply a global HMAC.
+     * If [algorithm] is not an AEAD cipher (e.g. CBC modes), the resulting ciphertext lacks integrity protection.
+     * Malicious modification of the ciphertext will not be detected during decryption. This is intended for educational purposes.
+     *
+     * @param data Plaintext bytes to encrypt (must be <= 10MB).
+     * @param password Password as a CharArray; its UTF-8 bytes are derived and cleared after use.
+     * @param algorithm Cipher algorithm to use for encryption and IV/key sizing.
+     * @param kdfConfig Argon2id parameters used to derive the encryption key.
+     * @param logCallback Optional logging function receiving progress/log messages.
+     * @return A Base64-encoded string containing salt || iv || ciphertext.
+     * @throws IllegalArgumentException If `data` exceeds the 10MB safety limit.
+     */
+    fun encryptRaw(
+        data: ByteArray,
+        password: CharArray,
+        algorithm: Algorithm,
+        kdfConfig: KdfConfig,
+        logCallback: (String) -> Unit = {}
+    ): String {
+        require(data.size <= MAX_DATA_LIMIT) { "Input exceeds 10MB safety limit." }
+
+        val startTime = System.currentTimeMillis()
+        logCallback("Starting Raw Encryption (${algorithm.name})...")
+
+        // 1. Generate Salt
+        val salt = ByteArray(16).apply { secureRandom.nextBytes(this) }
+
+        // 2. Generate IV (Dynamic Size)
+        val ivSize = getIvSize(algorithm)
+        val iv = ByteArray(ivSize).apply { secureRandom.nextBytes(this) }
+
+        // 3. Derive Key (Argon2id direct to Key Size)
+        val keySize = getKeySize(algorithm)
+        val passBytes = toBytes(password)
+        val key = try {
+            deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+        } finally {
+            passBytes.fill(0.toByte())
+        }
+
+        logCallback("Key derived (Argon2id).")
+
+        // 4. Encrypt using generalized processor
+        val ciphertext = try {
+            processCipher(true, algorithm, data, key, iv)
+        } finally {
+            key.fill(0.toByte())
+        }
+
+        // 5. Pack (Salt + IV + Ciphertext)
+        val output = ByteBuffer.allocate(salt.size + iv.size + ciphertext.size)
+            .put(salt)
+            .put(iv)
+            .put(ciphertext)
+            .array()
+
+        require(output.size <= MAX_DATA_LIMIT) { "Output exceeds 10MB safety limit." }
+
+        logCallback("Raw Encryption complete in ${System.currentTimeMillis() - startTime}ms.")
+
+        return encoder.encodeToString(output)
+    }
+
+    /**
+     * Decrypts a standalone raw container produced by encryptRaw.
+     *
+     * **SECURITY WARNING:** If the data was encrypted using a non-AEAD algorithm (e.g. CBC modes),
+     * this method cannot verify the integrity of the ciphertext. Tampered data may result in garbage
+     * output rather than a validation error. This is intended for educational purposes.
+     *
+     * @param encryptedData Base64-encoded container string (whitespace allowed) containing salt, IV, and ciphertext.
+     * @param password Password as a CharArray used to derive the decryption key; the function clears this input internally.
+     * @param algorithm The Algorithm that was used to encrypt the container.
+     * @param kdfConfig Argon2id parameters used for key derivation.
+     * @param logCallback Optional logging function that receives progress messages.
+     * @return The decrypted plaintext bytes.
+     * @throws IllegalArgumentException If decoding, key derivation, or decryption fails (e.g., wrong password/profile or data corruption).
+     */
+    fun decryptRaw(
+        encryptedData: String,
+        password: CharArray,
+        algorithm: Algorithm,
+        kdfConfig: KdfConfig,
+        logCallback: (String) -> Unit = {}
+    ): ByteArray {
+        val startTime = System.currentTimeMillis()
+        logCallback("Reading Raw Container...")
+
+        try {
+            // 1. Decode
+            val cleanData = encryptedData.filter { !it.isWhitespace() }
+            val rawBytes = decoder.decode(cleanData)
+
+            if (rawBytes.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input exceeds 10MB safety limit.")
+
+            val ivSize = getIvSize(algorithm)
+            val minSize = 16 + ivSize // Salt + IV
+            if (rawBytes.size <= minSize) throw IllegalArgumentException("Invalid data size.")
+
+            // 2. Unpack
+            val buffer = ByteBuffer.wrap(rawBytes)
+            val salt = ByteArray(16); buffer.get(salt)
+            val iv = ByteArray(ivSize); buffer.get(iv)
+            val ciphertext = ByteArray(buffer.remaining()); buffer.get(ciphertext)
+
+            // 3. Derive Key
+            val keySize = getKeySize(algorithm)
+            val passBytes = toBytes(password)
+            val key = try {
+                deriveKeyArgon2(passBytes, salt, kdfConfig, keySize)
+            } finally {
+                passBytes.fill(0.toByte())
+            }
+
+            // 4. Decrypt
+            val plaintext = try {
+                processCipher(false, algorithm, ciphertext, key, iv)
+            } finally {
+                key.fill(0.toByte())
+            }
+
+            logCallback("Decryption complete in ${System.currentTimeMillis() - startTime}ms.")
+            return plaintext
+
+        } catch (_: Exception) {
+            throw IllegalArgumentException("Raw Decryption failed. Wrong password, profile, or data corruption.")
+        }
+    }
+
+    /**
+     * Derives a 32-byte Argon2id hash from a PIN and salt.
+     *
+     * The function uses fixed Argon2id parameters to produce a 32-byte key from the provided PIN and salt.
+     *
+     * @param pin The PIN to hash; the function will clear the PIN contents after use.
+     * @param salt The salt bytes to use for derivation.
+     * @return A 32-byte derived hash.
+     */
     fun hashPin(pin: CharArray, salt: ByteArray): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
@@ -315,7 +515,7 @@ object CryptoEngine {
     }
 
     private fun compressData(data: ByteArray): ByteArray {
-        if (data.size > MAX_DATA_LIMIT) throw IllegalArgumentException("Input too large.")
+        require(data.size <= MAX_DATA_LIMIT) { "Input too large." }
         val d = Deflater(Deflater.BEST_COMPRESSION)
         d.setInput(data)
         d.finish()
@@ -324,7 +524,7 @@ object CryptoEngine {
         while (!d.finished()) {
             val c = d.deflate(b)
             o.write(b, 0, c)
-            if (o.size() > MAX_DATA_LIMIT) throw IllegalArgumentException("Compression overflow.")
+            require(o.size() <= MAX_DATA_LIMIT) { "Compression overflow." }
         }
         d.end()
         return o.toByteArray()
@@ -340,17 +540,39 @@ object CryptoEngine {
             val count = inflater.inflate(buffer)
             if (count == 0 && !inflater.finished()) break
             totalBytes += count
-            if (totalBytes > MAX_DATA_LIMIT) throw IllegalArgumentException("Decompression Limit Exceeded.")
+            require(totalBytes <= MAX_DATA_LIMIT) { "Decompression Limit Exceeded." }
             outputStream.write(buffer, 0, count)
         }
         inflater.end()
         return outputStream.toByteArray()
     }
 
+    /**
+     * Removes Base64 padding characters from the end of a string.
+     *
+     * @param i The input string (typically Base64-encoded) from which trailing `=` characters should be removed.
+     * @return The input string with all trailing `=` characters removed.
+     */
     private fun stripPadding(i: String) = i.trimEnd('=')
+    /**
+     * Restores Base64 padding so the input's length becomes a multiple of four.
+     *
+     * @param i A Base64-encoded string that may have had trailing '=' padding removed.
+     * @return The input string with '=' characters appended as needed to reach a length divisible by 4.
+     */
     private fun restorePadding(i: String): String { val m = i.length % 4; return if (m > 0) i + "=".repeat(4 - m) else i }
-
-    private fun deriveRootSecret(p: ByteArray, s: ByteArray, config: KdfConfig): ByteArray {
+    /**
+     * Derives a fixed-length key from password bytes and a salt using Argon2id with the provided KDF parameters.
+     *
+     * Uses Argon2id (version 1.3) and the iterations, memory, and parallelism from [config] to produce a key of the requested length.
+     *
+     * @param p Password-derived input bytes (will be used as Argon2 input).
+     * @param s Salt bytes to use for derivation.
+     * @param config Argon2id parameter set (iterations, memoryPow2, parallelism).
+     * @param length Desired length of the derived key in bytes.
+     * @return A byte array of size `length` containing the derived key.
+     */
+    private fun deriveKeyArgon2(p: ByteArray, s: ByteArray, config: KdfConfig, length: Int): ByteArray {
         val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
             .withVersion(Argon2Parameters.ARGON2_VERSION_13)
             .withIterations(config.iterations)
@@ -360,8 +582,8 @@ object CryptoEngine {
             .build()
         val g = Argon2BytesGenerator()
         g.init(params)
-        val r = ByteArray(32)
-        g.generateBytes(p, r, 0, 32)
+        val r = ByteArray(length)
+        g.generateBytes(p, r, 0, length)
         return r
     }
 
@@ -379,6 +601,8 @@ object CryptoEngine {
         return when (algo) {
             Algorithm.AES_GCM -> if (encrypt) encryptAesGcm(data, key, iv, null) else decryptAesGcm(data, key, iv, null)
             Algorithm.CHACHA20_POLY1305 -> processChaCha20Poly1305(encrypt, data, key, iv)
+            Algorithm.XCHACHA20_POLY1305 -> processXChaCha20Poly1305(encrypt, data, key, iv)
+            Algorithm.ARIA_256_GCM -> processAriaGcm(encrypt, data, key, iv)
             Algorithm.AES_CBC -> processBlockCipher(encrypt, AESEngine.newInstance(), data, key, iv)
             Algorithm.TWOFISH_CBC -> processBlockCipher(encrypt, TwofishEngine(), data, key, iv)
             Algorithm.SERPENT_CBC -> processBlockCipher(encrypt, SerpentEngine(), data, key, iv)
@@ -399,7 +623,38 @@ object CryptoEngine {
     // --- LOW LEVEL CIPHER IMPLEMENTATIONS ---
     private fun processChaCha20Poly1305(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
         val cipher = ChaCha20Poly1305()
-        // ChaCha20-Poly1305 takes a 128-bit MAC size (16 bytes) and a 96-bit Nonce (12 bytes)
+        val params = AEADParameters(KeyParameter(key), 128, iv, null)
+        cipher.init(encrypt, params)
+        val out = ByteArray(cipher.getOutputSize(data.size))
+        val len = cipher.processBytes(data, 0, data.size, out, 0)
+        val finalLen = cipher.doFinal(out, len)
+        return out.copyOf(len + finalLen)
+    }
+
+    private fun processXChaCha20Poly1305(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
+        require(iv.size == 24) { "XChaCha20 requires 24-byte nonce" }
+
+        // 1. Split IV into nonce (16 bytes) and block counter/remaining nonce (8 bytes)
+        val hNonce = iv.copyOfRange(0, 16)
+        val cNonce = iv.copyOfRange(16, 24)
+
+        // 2. HChaCha20 Derivation
+        val subKey = hChaCha20(key, hNonce)
+
+        // 3. Construct 12-byte IV for ChaCha20 (4 bytes 0 + 8 bytes cNonce)
+        val subIv = ByteArray(12)
+        System.arraycopy(cNonce, 0, subIv, 4, 8)
+
+        // 4. Delegate to standard ChaCha20Poly1305
+        return try {
+            processChaCha20Poly1305(encrypt, data, subKey, subIv)
+        } finally {
+            subKey.fill(0.toByte())
+        }
+    }
+
+    private fun processAriaGcm(encrypt: Boolean, data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
+        val cipher = GCMBlockCipher.newInstance(ARIAEngine(), org.bouncycastle.crypto.modes.gcm.BasicGCMMultiplier())
         val params = AEADParameters(KeyParameter(key), 128, iv, null)
         cipher.init(encrypt, params)
         val out = ByteArray(cipher.getOutputSize(data.size))
@@ -433,5 +688,56 @@ object CryptoEngine {
         cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec)
         if (aad != null) cipher.updateAAD(aad)
         return cipher.doFinal(data)
+    }
+
+    private fun hChaCha20(key: ByteArray, nonce: ByteArray): ByteArray {
+        require(key.size == 32) { "HChaCha20 requires 32-byte key" }
+        require(nonce.size == 16) { "HChaCha20 requires 16-byte nonce" }
+        val state = IntArray(16)
+
+        try {
+            // Constants (expand 32-byte k)
+            state[0] = 0x61707865; state[1] = 0x3320646e; state[2] = 0x79622d32; state[3] = 0x6b206574
+
+            // Key
+            val k = ByteBuffer.wrap(key).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+            for (i in 0..7) state[4 + i] = k[i]
+
+            // Nonce
+            val n = ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
+            for (i in 0..3) state[12 + i] = n[i]
+
+            // 20 Rounds
+            repeat(10) {
+                quarterRound(state, 0, 4, 8, 12)
+                quarterRound(state, 1, 5, 9, 13)
+                quarterRound(state, 2, 6, 10, 14)
+                quarterRound(state, 3, 7, 11, 15)
+                quarterRound(state, 0, 5, 10, 15)
+                quarterRound(state, 1, 6, 11, 12)
+                quarterRound(state, 2, 7, 8, 13)
+                quarterRound(state, 3, 4, 9, 14)
+            }
+
+            // Output: State words 0-3 and 12-15
+            val out = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN)
+            for (i in 0..3) out.putInt(state[i])
+            for (i in 12..15) out.putInt(state[i])
+            return out.array()
+
+        } finally {
+            state.fill(0)
+        }
+    }
+
+    private fun quarterRound(x: IntArray, a: Int, b: Int, c: Int, d: Int) {
+        x[a] += x[b]; x[d] = rotateLeft(x[d] xor x[a], 16)
+        x[c] += x[d]; x[b] = rotateLeft(x[b] xor x[c], 12)
+        x[a] += x[b]; x[d] = rotateLeft(x[d] xor x[a], 8)
+        x[c] += x[d]; x[b] = rotateLeft(x[b] xor x[c], 7)
+    }
+
+    private fun rotateLeft(i: Int, distance: Int): Int {
+        return (i shl distance) or (i ushr -distance)
     }
 }

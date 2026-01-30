@@ -6,14 +6,21 @@ plugins {
 
 android {
     namespace = "dev.animeshvarma.sigil"
-    compileSdk = 36 // Latest Android 16 (Baklava)
+    compileSdk = 36 // Android 16 (Baklava)
 
     defaultConfig {
         applicationId = "dev.animeshvarma.sigil"
-        minSdk = 26
-        targetSdk = 36
-        versionCode = 10
-        versionName = "0.4.1"
+        minSdk = 26 // Android 8 (Oreo)
+        targetSdk = 36 // Android 16 (Baklava)
+        // Schema: Positional logic (Major*10000 + Minor*100 + Patch).
+        // Ensures strictly increasing, parseable codes (Implemented in v0.4.5).
+        versionCode = 405
+        /* v0.5.0 Scope Split:
+         * - v0.4.5 ships Profiles & Engine updates (Current).
+         * - v0.5.0 defers Steganography & remaining features (Planned).
+         * Context: Maintains consistent update size and monthly cadence.
+         */
+        versionName = "0.4.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -45,9 +52,6 @@ android {
     }
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
@@ -83,6 +87,7 @@ dependencies {
 
     // --- Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation(libs.androidx.foundation)
 
     // --- Testing ---
     testImplementation("junit:junit:4.13.2")
