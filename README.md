@@ -110,7 +110,6 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 ---
 
 ## Screenshots 
-`Todo: update before PR`
 
 <details>
 <summary><b>Click here to view App Screenshots</b></summary>
