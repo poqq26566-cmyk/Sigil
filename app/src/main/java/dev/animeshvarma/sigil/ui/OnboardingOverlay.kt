@@ -24,7 +24,9 @@ import kotlin.math.roundToInt
 
 enum class OnboardingState {
     START_SCREEN,
-    BASIC_INTRO, BASIC_INPUT, BASIC_PASS, BASIC_ENCRYPT_WAIT, BASIC_ENCRYPT_DONE, BASIC_OUTPUT,
+    BASIC_INTRO,
+    BASIC_PROFILE_EXPLAIN,
+    BASIC_INPUT, BASIC_PASS, BASIC_ENCRYPT_WAIT, BASIC_ENCRYPT_DONE, BASIC_OUTPUT,
     DECRYPT_PREP, DECRYPT_WAIT, DECRYPT_DONE,
     DRAWER_SHOW,
     KEYSTORE_NAV, KEYSTORE_EXPLAIN, KEYSTORE_USAGE,
@@ -54,6 +56,7 @@ fun OnboardingOrchestrator(
                 viewModel.onModeSelected(SigilMode.AUTO)
                 viewModel.injectDemoData("", "", "")
             }
+            OnboardingState.BASIC_PROFILE_EXPLAIN -> { }
             OnboardingState.BASIC_INPUT -> viewModel.injectDemoData(DEMO_LOREM, "", "")
             OnboardingState.BASIC_PASS -> viewModel.injectDemoData(DEMO_LOREM, "BlueHorse", "")
             OnboardingState.BASIC_ENCRYPT_WAIT -> { }
@@ -70,9 +73,9 @@ fun OnboardingOrchestrator(
                 delay(300)
                 viewModel.toggleDemoDrawer(true)
             }
-
             OnboardingState.KEYSTORE_NAV -> {
                 viewModel.toggleDemoDrawer(false)
+                delay(400)
                 viewModel.injectDemoVault()
                 viewModel.onScreenSelected(AppScreen.KEYSTORE)
             }
@@ -160,8 +163,13 @@ fun OnboardingOrchestrator(
             Box(modifier = Modifier.fillMaxSize().clickable(enabled = true, onClick = {}))
 
             PromptOverlay(state = state) {
+                if (state == OnboardingState.DRAWER_SHOW) {
+                    viewModel.toggleDemoDrawer(false)
+                }
+
                 state = when (state) {
-                    OnboardingState.BASIC_INTRO -> OnboardingState.BASIC_INPUT
+                    OnboardingState.BASIC_INTRO -> OnboardingState.BASIC_PROFILE_EXPLAIN
+                    OnboardingState.BASIC_PROFILE_EXPLAIN -> OnboardingState.BASIC_INPUT
                     OnboardingState.BASIC_INPUT -> OnboardingState.BASIC_PASS
                     OnboardingState.BASIC_PASS -> OnboardingState.BASIC_ENCRYPT_WAIT
                     OnboardingState.BASIC_ENCRYPT_WAIT -> OnboardingState.BASIC_ENCRYPT_DONE
@@ -201,6 +209,7 @@ fun OnboardingOrchestrator(
 fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
     val alignment = when(state) {
         OnboardingState.BASIC_INTRO,
+        OnboardingState.BASIC_PROFILE_EXPLAIN,
         OnboardingState.BASIC_INPUT,
         OnboardingState.BASIC_PASS,
         OnboardingState.DECRYPT_PREP,
@@ -289,6 +298,7 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
 
 private fun getPromptTitle(state: OnboardingState): String = when(state) {
     OnboardingState.BASIC_INTRO -> "Primary Workspace"
+    OnboardingState.BASIC_PROFILE_EXPLAIN -> "Security Profile" // NEW TITLE
     OnboardingState.BASIC_INPUT -> "1. Input"
     OnboardingState.BASIC_PASS -> "2. Password"
     OnboardingState.BASIC_ENCRYPT_WAIT -> "3. Execution"
@@ -318,14 +328,16 @@ private fun getPromptTitle(state: OnboardingState): String = when(state) {
 }
 
 private fun getPromptBody(state: OnboardingState): String = when(state) {
-    OnboardingState.BASIC_INTRO -> "This is the Auto tab, which is divided into three primary components: Input, Password, and Output.\n\nNote: You can drag this box at any step if it obstructs your view."
+    OnboardingState.BASIC_INTRO -> "This is the Auto tab, which is divided into three primary components: Input, Password, and Output."
+
+    OnboardingState.BASIC_PROFILE_EXPLAIN -> "Use the bookmark icon to switch Encryption Profiles.\n\n• Sigil Chain: Maximum security (Cascaded).\n• Standard AES: Maximum compatibility (Raw Mode).\n\nYou can create your own chains in the Custom tab."
 
     OnboardingState.BASIC_INPUT -> "Enter your plain text or message into the first field for processing."
     OnboardingState.BASIC_PASS -> "Secure your message with a strong password here. You can use the visibility icon to verify your input before proceeding."
 
-    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tapping Encrypt applies a randomized quad-layer cascade using AES, ChaCha20, Twofish, and Serpent algorithms."
+    OnboardingState.BASIC_ENCRYPT_WAIT -> "Tapping Encrypt applies the active profile's algorithm chain (e.g., Quad-Layer Cascade)."
 
-    OnboardingState.BASIC_ENCRYPT_DONE -> "The system is processing..."
+    OnboardingState.BASIC_ENCRYPT_DONE -> "The system is processing...\n\nFun Fact: The majority of execution time is consumed by Key Derivation (KDF), not the encryption algorithms themselves."
     OnboardingState.BASIC_OUTPUT -> "The resulting output is impossible to break and requires the specific key for decryption."
     OnboardingState.DECRYPT_PREP -> "To decrypt a message, paste the output directly back into the Input field on this or another device."
     OnboardingState.DECRYPT_WAIT -> "Enter the correct password to authenticate and reveal the original message."
@@ -366,7 +378,7 @@ fun ForkSelectionScreen(onFinish: () -> Unit, onAdvanced: () -> Unit) {
         Text("Basics Complete", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         Text(
-            "You know the essentials.",
+            "You know the essentials.\n\n(Note: The Profiles tab onboarding will be added in v0.5.0)",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
