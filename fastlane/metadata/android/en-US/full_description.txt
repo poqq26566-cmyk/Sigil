@@ -7,7 +7,7 @@ The application operates entirely offline, performing all cryptographic operatio
 *   **Encryption Profiles:** Customize your security posture. Switch between "Standard AES-GCM" (Raw mode) for compatibility with external tools, or the "Sigil Chain" for maximum defense.
 *   **Multi-Layer Cascade:** The default Sigil Chain wraps your data in a hybrid cascade of XChaCha20-Poly1305 + Serpent-CBC + Twofish-CBC + AES-256-GCM. This defense-in-depth approach ensures that even if one algorithm is compromised, your data remains protected by independent layers.
 *   **Zero-Knowledge Auth:** Secure the app with a numeric PIN or a strong alphanumeric Password. Credentials are hashed using Salted Argon2id and never stored in a reversible format.
-*   **Hardware-Backed Vault:** When supported by the device, master keys are generated and stored in the Android Keystore (or StrongBox). Saved encryption passwords never touch the disk in plaintext..
+*   **Hardware-Backed Vault:** When supported by the device, master keys are generated and stored in the Android Keystore (or StrongBox). Saved encryption passwords never touch the disk in plaintext.
 *   **Memory Hygiene:** Sensitive data buffers are zeroed where possible after use to reduce exposure to memory dumps.
 
 **Privacy & System Hardening**

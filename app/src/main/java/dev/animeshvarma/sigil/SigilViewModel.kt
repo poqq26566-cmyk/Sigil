@@ -94,7 +94,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         val active = allProfiles.find { it.id == savedId } ?: ProfileRegistry.defaultProfile
         if (savedId != active.id) {
             prefs.activeProfileId = active.id
-            }
+        }
 
         _uiState.update {
             it.copy(
@@ -492,7 +492,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                 // CHECK FOR RAW PROFILE IN AUTO MODE
                 if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
                     val profile = state.activeProfile
-                    // Raw mode assumes valid profile construction (single layer)
+                    // Fallback to AES_GCM is defensive; profile validation ensures layers is non-empty
                     val algo = profile.layers.firstOrNull() ?: CryptoEngine.Algorithm.AES_GCM
 
                     addLog("Mode: Raw (${algo.name}).")
@@ -619,7 +619,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     else it.copy(customOutput = decryptedString, isLoading = false)
                 }
 
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 val errorReport = StringBuilder()
                 if (state.selectedMode == SigilMode.AUTO && state.activeProfile.isRaw) {
                     errorReport.append("Raw Decryption Failed\n")
@@ -645,7 +645,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     else it.copy(customOutput = finalMessage, isLoading = false)
                 }
 
-                addLog("Decryption Failed.")
+                addLog("Decryption Failed - ${e.javaClass.simpleName}: ${e.message ?: "Unknown error"}")
             } finally {
                 SecureMemory.wipe(pwdChars)
             }
@@ -862,8 +862,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val isValid = try {
                 lockManager.verifySecret(input)
-            } catch (_: Exception) {
-                addLog("Error: App lock verification failed.")
+            } catch (e: Exception) {
+                addLog("Error: App lock verification failed - ${e.javaClass.simpleName}: ${e.message ?: "Unknown error"}")
                 false
             }
 
