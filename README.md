@@ -201,7 +201,7 @@ cd Sigil
 
 Sigil is an open-learning project. While I try my hardest to adhere to best practices, it hasn't been audited by a professional firm yet. I encourage you to read the code!
 
-**Permanent Data Loss:** If you lose your Master PIN or Password, your data is gone forever. I can't help you recover it. (-_-)
+**Permanent Data Loss:** If you lose your Master PIN or Password, your data is gone forever. I can't help you recover it.
 
 ---
 

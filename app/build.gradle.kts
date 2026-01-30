@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "dev.animeshvarma.sigil"
-    compileSdk = 36 // Latest Android 16 (Baklava)
+    compileSdk = 36 // Android 16 (Baklava)
 
     defaultConfig {
         applicationId = "dev.animeshvarma.sigil"
-        minSdk = 26
-        targetSdk = 36
+        minSdk = 26 // Android 8 (Oreo)
+        targetSdk = 36 // Android 16 (Baklava)
         // Schema: Positional logic (Major*10000 + Minor*100 + Patch).
         // Ensures strictly increasing, parseable codes (Implemented in v0.4.5).
         versionCode = 405

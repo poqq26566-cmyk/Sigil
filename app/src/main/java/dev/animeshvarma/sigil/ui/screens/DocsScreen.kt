@@ -118,11 +118,72 @@ data class ReleaseCategory(
 @Composable
 fun ReleasesContent() {
     val releases = listOf(
+        // --- v0.4.5 (Profiles & Passwords) ---
+        ReleaseData(
+            version = "v0.4.5",
+            title = "Profiles & Passwords",
+            tag = "Current Build",
+            hasBreakingChanges = false,
+            categories = listOf(
+                ReleaseCategory(
+                    "Encryption Profiles",
+                    listOf(
+                        "Custom Chains: Users can now create, name, and save their own multi-algorithm encryption chains in the Custom tab.",
+                        "Raw Mode: Added a 'Raw' compatibility mode. This bypasses Sigil metadata headers and outputs pure ciphertext/IV, compatible with standard external tools and provides a way of encryption for those who critique multi-layered encryption.",
+                        "Sigil Chain: The default cascade (XChaCha20 + Serpent + Twofish + AES) is now an explicit built-in profile."
+                    )
+                ),
+                ReleaseCategory(
+                    "Auth Overhaul",
+                    listOf(
+                        "Passwords: Added support for alphanumeric Passwords alongside numeric PINs.",
+                        "Dynamic Lock Screen: The keyboard now automatically switches between Number Pad and QWERTY based on your lock type.",
+                        "Setup Wizard: Replaced simple toggles with a secure multi-step setup flow (Select -> Input -> Confirm)."
+                    )
+                ),
+                ReleaseCategory(
+                    "Cryptography (Engine v0.11.0)",
+                    listOf(
+                        "New Algorithms: Added XChaCha20-Poly1305 (Extended Nonce) and ARIA-256-GCM.",
+                        "Fail-Safe Storage: Hardened LockManager logic to prevent optimistic state updates if hardware storage fails.",
+                        "Strict Hygiene: Enhanced memory wiping in the encryption loop to zero out intermediate buffers."
+                    )
+                )
+            )
+        ),
+        // --- v0.4.1 (Transparency Hotfix) ---
+        ReleaseData(
+            version = "v0.4.1",
+            title = "Transparency Hotfix",
+            tag = "Jan 15, 2026",
+            hasBreakingChanges = false,
+            categories = listOf(
+                ReleaseCategory(
+                    "Build Transparency",
+                    listOf(
+                        "Removed Google Metadata: Explicitly disabled the 'dependenciesInfo' block to remove encrypted blobs from the APK, ensuring total binary transparency for F-Droid/IzzyOnDroid."
+                    )
+                ),
+                ReleaseCategory(
+                    "Documentation",
+                    listOf(
+                        "Store Compliance: Refined descriptions for third-party clients.",
+                        "Assets: Standardized screenshot naming for consistent store ordering."
+                    )
+                ),
+                ReleaseCategory(
+                    "Auth",
+                    listOf(
+                        "Migrate biometric keys to AES-GCM via alias rotation."
+                    )
+                )
+            )
+        ),
         // --- v0.4 (SECURITY CORE & ONBOARDING) ---
         ReleaseData(
             version = "v0.4",
             title = "Onboarding & Access Control",
-            tag = "Current Build",
+            tag = "Jan 07, 2026",
             hasBreakingChanges = true,
             categories = listOf(
                 ReleaseCategory(
