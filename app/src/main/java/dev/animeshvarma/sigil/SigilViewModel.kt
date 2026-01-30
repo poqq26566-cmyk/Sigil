@@ -153,9 +153,10 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val currentCustom = prefs.getCustomProfiles().toMutableList()
+        val allProfiles = ProfileRegistry.builtInProfiles + currentCustom
 
-        // Check for Name Duplication
-        val duplicate = currentCustom.find { it.name.equals(name, ignoreCase = true) }
+        // Check for Name Duplication (including built-in profiles)
+        val duplicate = allProfiles.find { it.name.equals(name, ignoreCase = true) }
         if (duplicate != null) {
             onDuplicateName(duplicate)
             return
@@ -216,8 +217,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
         val index = currentCustom.indexOfFirst { it.id == id }
 
         if (index != -1) {
-            // Check if name is taken by ANOTHER profile
-            val collision = currentCustom.any { it.id != id && it.name.equals(name, ignoreCase = true) }
+            val allProfiles = ProfileRegistry.builtInProfiles + currentCustom
+            val collision = allProfiles.any { it.id != id && it.name.equals(name, ignoreCase = true) }
             if (collision) {
                 addLog("Error: Profile name '$name' is already taken.")
                 onNameCollision()
@@ -259,6 +260,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             loadProfiles()
             selectProfile(profile)
             addLog("Profile Updated: ${profile.name}")
+        } else {
+            addLog("Error: Profile '${profile.name}' not found for overwrite.")
         }
     }
 
@@ -532,7 +535,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     else it.copy(customOutput = result, isLoading = false)
                 }
             } catch (e: Exception) {
-                addLog("Error: Encryption failed - ${e.javaClass.simpleName}")
+                addLog("Error: Encryption failed - ${e.javaClass.simpleName}: ${e.message ?: "Unknown error"}")
                 _uiState.update { it.copy(isLoading = false) }
             } finally {
                 SecureMemory.wipe(pwdChars)
@@ -835,9 +838,9 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("App Lock enabled (${type.name}).")
                 }
                 success = true
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    addLog("Error: Failed to enable App Lock.")
+                    addLog("Error: Failed to enable App Lock - ${e.javaClass.simpleName}: ${e.message ?: "Unknown error"}")
                 }
                 success = false
             } finally {

@@ -1,5 +1,5 @@
 # SIGIL
-**Open-source, offline zero-trust encryption utility**
+**Open-source zero-trust cryptography & privacy suite with multi-layer encryption.**
 
 [![Version](https://img.shields.io/badge/Version-v0.4.5-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
 [![License](https://img.shields.io/github/license/Animesh-Varma/Sigil?style=flat-square&color=green)](https://github.com/Animesh-Varma/Sigil/blob/master/LICENSE)

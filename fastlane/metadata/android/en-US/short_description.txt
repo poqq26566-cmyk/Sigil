@@ -1,1 +1,1 @@
-Open-source cryptography & privacy suite with multi-layer encryption.
+Open-source zero-trust cryptography & privacy suite with multi-layer encryption.
