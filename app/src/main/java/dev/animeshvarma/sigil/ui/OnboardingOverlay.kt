@@ -174,7 +174,9 @@ private val OnboardingState.config: StepConfig
             next = OnboardingState.FINISHED,
             btnLabel = "Finish"
         )
-        else -> StepConfig("", "")
+        OnboardingState.START_SCREEN,
+        OnboardingState.FORK_SELECTION,
+        OnboardingState.FINISHED -> error("$this has no StepConfig; handled separately in OnboardingOrchestrator")
     }
 
 @Composable
@@ -308,7 +310,7 @@ private fun StartScreen(
 }
 
 @Composable
-fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
+private fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
     val config = state.config
 
     var offsetX by remember(state) { mutableFloatStateOf(0f) }
@@ -365,7 +367,7 @@ fun PromptOverlay(state: OnboardingState, onNext: () -> Unit) {
 }
 
 @Composable
-fun ForkSelectionScreen(onFinish: () -> Unit, onAdvanced: () -> Unit) {
+private fun ForkSelectionScreen(onFinish: () -> Unit, onAdvanced: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()

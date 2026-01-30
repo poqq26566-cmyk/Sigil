@@ -37,11 +37,11 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 
 ### Release Status
 
-| Platform | Current Version | Build Channel |
-| :--- |:----------------| :--- |
-| **IzzyOnDroid** | **v0.4.5** | Pre-release |
-| **Google Play** | **v0.4.5** | Pre-release |
-| **GitHub Releases** | **v0.4.5** | Pre-release |
+| Platform            | Current Version | Build Channel |
+|:--------------------|:----------------|:--------------|
+| **IzzyOnDroid**     | **v0.4.5**      | Pre-release   |
+| **Google Play**     | **v0.4.5**      | Pre-release   |
+| **GitHub Releases** | **v0.4.5**      | Pre-release   |
 
 ---
 
@@ -66,7 +66,7 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 ## Features
 
 - **Encryption Profiles (New):** Switch between "Raw Mode" (Standard encryption compatibility for any algo), the classic "Sigil Chain", or create your own chain!
-- **Multi-Layer Cascade:** By default, Sigil encrypts your data with the "Sigil Chain" profile (`XChaCha20` → `Serpent` → `Twofish` → `AES-256`). The number of algorithms doesn't really increase encryption time, as for text encryption, most of the time is taken just by the KDF.
+- **Multi-Layer Cascade:** By default, Sigil encrypts your data with the "Sigil Chain" profile (`XChaCha20` → `Serpent` → `Twofish` → `AES-256`). For typical text inputs, the KDF dominates execution time, making the multi-layer overhead negligible; however, larger data [>2 MB] will show linear scaling with layer count.
 - **Zero-Knowledge Auth:** Support for both **PINs** and **Passwords**. Authentication is handled via salted Argon2id hashes. Credentials are never stored in a reversible format.
 - **Hardware-Backed Keystore:** Master seeds are generated and stored inside your phone's **Trusted Execution Environment (TEE)**. They never touch the app layer in plaintext.
 - **Access Control:** Includes TEE-verified Biometrics and **Screen Shield** (just fancy talk for `flag_secure`).
@@ -117,12 +117,12 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 <div align="center">
 
-|                                                                                                                                                |                                                                                                                                       |                                                                                                                              |
-|:----------------------------------------------------------------------------------------------------------------------------------------------:|:-------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------:|
-|          <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01.jpg" alt="Onboarding" width="200"><br><b>Onboarding</b>          |       <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02.jpg" alt="App Lock" width="200"><br><b>App Lock</b>        | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03.jpg" alt="Navigation" width="200"><br><b>Navigation</b> |
-| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04.jpg" alt="Encryption Profiles" width="200"><br><b>Encryption Profiles</b> |    <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05.jpg" alt="Custom Mode" width="200"><br><b>Custom Mode</b>     | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06.jpg" alt="Algorithms" width="200"><br><b>Algorithms</b> |
-|        <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07.jpg" alt="Save Profile" width="200"><br><b>Save Profile</b>        |           <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08.jpg" alt="Logs" width="200"><br><b>Logs</b>            |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/09.jpg" alt="Settings" width="200"><br><b>Settings</b>   |
-|            <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10.jpg" alt="Keystore" width="200"><br><b>Keystore</b>            |        <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11.jpg" alt="Keystore Usage" width="200"><br>Keystore Usage<b></b>         |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/12.jpg" alt="Releases" width="200"><br><b>Releases</b>   |
+|                                                                                                                                                |                                                                                                                                      |                                                                                                                              |
+|:----------------------------------------------------------------------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------:|
+|          <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01.jpg" alt="Onboarding" width="200"><br><b>Onboarding</b>          |       <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02.jpg" alt="App Lock" width="200"><br><b>App Lock</b>       | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03.jpg" alt="Navigation" width="200"><br><b>Navigation</b> |
+| <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04.jpg" alt="Encryption Profiles" width="200"><br><b>Encryption Profiles</b> |    <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05.jpg" alt="Custom Mode" width="200"><br><b>Custom Mode</b>    | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06.jpg" alt="Algorithms" width="200"><br><b>Algorithms</b> |
+|        <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07.jpg" alt="Save Profile" width="200"><br><b>Save Profile</b>        |           <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08.jpg" alt="Logs" width="200"><br><b>Logs</b>           |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/09.jpg" alt="Settings" width="200"><br><b>Settings</b>   |
+|            <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/10.jpg" alt="Keystore" width="200"><br><b>Keystore</b>            | <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/11.jpg" alt="Keystore Usage" width="200"><br><b>Keystore Usage</b> |   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/12.jpg" alt="Releases" width="200"><br><b>Releases</b>   |
 
 </div>
 
@@ -134,26 +134,26 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 Sigil currently supports **20 cryptographic algorithms**, including modern standards, AES finalists, and some legacy ones (for educational/testing purposes, trigger a UI warning when selected).
 
-| Algorithm | Type | Block Size | Origin/Standard | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **AES-GCM** | Block (AEAD) | 128-bit | NIST Standard (USA) | **Primary** |
-| **ChaCha20-Poly1305** | Stream (AEAD) | N/A | IETF Standard | **Primary** |
-| **XChaCha20-Poly1305** | Stream (AEAD) | N/A | Extended Nonce Variant | **SOTA** |
-| **ARIA-256-GCM** | Block (AEAD) | 128-bit | IETF RFC 5794 (South Korea) | **Very Strong** |
-| **Serpent** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
-| **Twofish** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
-| **Camellia** | Block (CBC) | 128-bit | NESSIE/CRYPTREC (EU/Japan) | **Strong** |
-| **SM4** | Block (CBC) | 128-bit | GB/T 32907 (China) | **Strong** |
-| **SEED** | Block (CBC) | 128-bit | KISA (South Korea) | **Strong** |
-| **CAST-256** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
-| **RC6** | Block (CBC) | 128-bit | AES Finalist | **Strong** |
-| **AES-CBC** | Block (CBC) | 128-bit | NIST Standard | Legacy Support |
-| **Blowfish** | Block (CBC) | 64-bit | Legacy Schneier Design | *Weak (Flagged)* |
-| **IDEA** | Block (CBC) | 64-bit | PGP Standard | *Weak (Flagged)* |
-| **CAST-128** | Block (CBC) | 64-bit | GPG Legacy | *Weak (Flagged)* |
-| **GOST 28147** | Block (CBC) | 64-bit | GOST (USSR/Russia) | *Weak (Flagged)* |
-| **TEA** | Block (CBC) | 64-bit | Cambridge | *Weak (Flagged)* |
-| **XTEA** | Block (CBC) | 64-bit | Extended TEA | *Weak (Flagged)* |
+| Algorithm              | Type          | Block Size | Origin/Standard             | Status           |
+|:-----------------------|:--------------|:-----------|:----------------------------|:-----------------|
+| **AES-GCM**            | Block (AEAD)  | 128-bit    | NIST Standard (USA)         | **Primary**      |
+| **ChaCha20-Poly1305**  | Stream (AEAD) | N/A        | IETF Standard               | **Primary**      |
+| **XChaCha20-Poly1305** | Stream (AEAD) | N/A        | Extended Nonce Variant      | **SOTA**         |
+| **ARIA-256-GCM**       | Block (AEAD)  | 128-bit    | IETF RFC 5794 (South Korea) | **Very Strong**  |
+| **Serpent**            | Block (CBC)   | 128-bit    | AES Finalist                | **Strong**       |
+| **Twofish**            | Block (CBC)   | 128-bit    | AES Finalist                | **Strong**       |
+| **Camellia**           | Block (CBC)   | 128-bit    | NESSIE/CRYPTREC (EU/Japan)  | **Strong**       |
+| **SM4**                | Block (CBC)   | 128-bit    | GB/T 32907 (China)          | **Strong**       |
+| **SEED**               | Block (CBC)   | 128-bit    | KISA (South Korea)          | **Strong**       |
+| **CAST-256**           | Block (CBC)   | 128-bit    | AES Finalist                | **Strong**       |
+| **RC6**                | Block (CBC)   | 128-bit    | AES Finalist                | **Strong**       |
+| **AES-CBC**            | Block (CBC)   | 128-bit    | NIST Standard               | Legacy Support   |
+| **Blowfish**           | Block (CBC)   | 64-bit     | Legacy Schneier Design      | *Weak (Flagged)* |
+| **IDEA**               | Block (CBC)   | 64-bit     | PGP Standard                | *Weak (Flagged)* |
+| **CAST-128**           | Block (CBC)   | 64-bit     | GPG Legacy                  | *Weak (Flagged)* |
+| **GOST 28147**         | Block (CBC)   | 64-bit     | GOST (USSR/Russia)          | *Weak (Flagged)* |
+| **TEA**                | Block (CBC)   | 64-bit     | Cambridge                   | *Weak (Flagged)* |
+| **XTEA**               | Block (CBC)   | 64-bit     | Extended TEA                | *Weak (Flagged)* |
 
 ---
 
