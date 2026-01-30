@@ -1,4 +1,4 @@
-# SIGIL 
+# SIGIL
 **Open-source, offline zero-trust encryption utility**
 
 [![Version](https://img.shields.io/badge/Version-v0.4.5-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
@@ -37,11 +37,11 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 
 ### Release Status
 
-| Platform | Current Version  | Build Channel |
-| :--- |:-----------------| :--- |
-| **IzzyOnDroid** | **v0.4.5**       | Pre-release |
-| **Google Play** | **v0.4.5**       | Pre-release |
-| **GitHub Releases** | **v0.4.5**       | Pre-release |
+| Platform | Current Version | Build Channel |
+| :--- |:----------------| :--- |
+| **IzzyOnDroid** | **v0.4.5** | Pre-release |
+| **Google Play** | **v0.4.5** | Pre-release |
+| **GitHub Releases** | **v0.4.5** | Pre-release |
 
 ---
 
@@ -109,7 +109,7 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 ---
 
-## Screenshots 
+## Screenshots
 
 <details>
 <summary><b>Click here to view App Screenshots</b></summary>
