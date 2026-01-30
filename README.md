@@ -132,7 +132,7 @@ Sigil v0.4.5 introduces **Encryption Profiles**, allowing users to define the co
 
 ## Algorithm Registry
 
-Sigil currently supports **20 cryptographic algorithms**, including modern standards, AES finalists, and some legacy ones (for educational/testing purposes).
+Sigil currently supports **20 cryptographic algorithms**, including modern standards, AES finalists, and some legacy ones (for educational/testing purposes, trigger a UI warning when selected).
 
 | Algorithm | Type | Block Size | Origin/Standard | Status |
 | :--- | :--- | :--- | :--- | :--- |
