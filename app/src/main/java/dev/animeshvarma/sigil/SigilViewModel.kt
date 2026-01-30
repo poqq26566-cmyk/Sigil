@@ -531,8 +531,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
                     if (wasAutoMode) it.copy(autoOutput = result, isLoading = false)
                     else it.copy(customOutput = result, isLoading = false)
                 }
-            } catch (_: Exception) {
-                addLog("Error: Encryption failed.")
+            } catch (e: Exception) {
+                addLog("Error: Encryption failed - ${e.javaClass.simpleName}")
                 _uiState.update { it.copy(isLoading = false) }
             } finally {
                 SecureMemory.wipe(pwdChars)
@@ -829,7 +829,7 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             var success = false
             try {
                 lockManager.setAppLock(secret, type)
-                
+
                 withContext(Dispatchers.Main) {
                     addLog("App secret set (TEE Encrypted).")
                     addLog("App Lock enabled (${type.name}).")
@@ -905,9 +905,8 @@ class SigilViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
                 ks.load(null)
-                val aliases = ks.aliases()
-                while (aliases.hasMoreElements()) {
-                    val alias = aliases.nextElement()
+                val aliasesList = ks.aliases().toList()
+                for (alias in aliasesList) {
                     ks.deleteEntry(alias)
                 }
             } catch (e: Exception) {

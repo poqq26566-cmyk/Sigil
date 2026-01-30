@@ -15,7 +15,7 @@
 
 Sigil is an encryption utility built with a focus on defense-in-depth and memory safety. In a world where privacy policies change overnight and "end-to-end" often has a backdoor, Sigil provides a secure, offline-only toolset for securing sensitive information.
 
-By default, Sigil uses a Quad-Layer encryption chain that exceeds almost any threat model. But hey, why settle for standard security when you can have more? (There is also a standard "Raw Mode" for those who critique multi-layered encryption). :)
+By default, Sigil uses the "Sigil Chain" profile, a quad-layer encryption cascade that exceeds almost any threat model. But flexibility is key: you can choose Standard AES (Raw Mode) for compatibility, or build custom profiles tailored to your exact requirements. :)
 
 Sigil aims to be much more than just an encryption app; it aims to be a complete security suite to address all your cryptography needs. Check out the [Roadmap](#roadmap) for planned features—any suggestions are highly appreciated!
 
@@ -66,7 +66,7 @@ Sigil aims to be much more than just an encryption app; it aims to be a complete
 ## Features
 
 - **Encryption Profiles (New):** Switch between **Standard AES** (a built‑in profile that uses Raw Mode), the classic **Sigil Chain**, or create your own chain.
-- **Multi-Layer Cascade:** By default, Sigil encrypts your data with the "Sigil Chain" profile (`XChaCha20` → `Serpent` → `Twofish` → `AES-256`). For typical text inputs, the KDF dominates execution time, making the multi-layer overhead negligible; however, larger data [>2 MB] will show linear scaling with layer count.
+- **Multi-Layer Cascade:** By default, Sigil encrypts your data with the "Sigil Chain" profile (`XChaCha20-Poly1305` → `Serpent` → `Twofish` → `AES-256`). For typical text inputs, the KDF dominates execution time, making the multi-layer overhead negligible; however, larger data [>2 MB] will show linear scaling with layer count.
 - **Zero-Knowledge Auth:** Support for both **PINs** and **Passwords**. Authentication is handled via salted Argon2id hashes. Credentials are never stored in a reversible format.
 - **Hardware-Backed Keystore:** Master seeds are generated and stored inside your phone's **Trusted Execution Environment (TEE)**. They never touch the app layer in plaintext.
 - **Access Control:** Includes TEE-verified Biometrics and **Screen Shield** (just fancy talk for `flag_secure`).

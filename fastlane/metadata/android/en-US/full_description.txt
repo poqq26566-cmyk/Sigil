@@ -26,7 +26,7 @@ The application operates entirely offline, performing all cryptographic operatio
 **Technical Specifications**
 
 *   **Key Derivation:** Argon2id (Configurable up to 256MB RAM) + SHA-512 pre-hashing.
-*   **Supported Algorithms:** AES (GCM/CBC), ChaCha20-Poly1305, XChaCha20-Poly1305, ARIA-256-GCM, Twofish, Serpent, Camellia, CAST6, RC6, SM4, GOST, SEED, Blowfish, IDEA, CAST5, TEA, and XTEA.
+*   **Supported Algorithms:** AES-256-GCM, AES-256-CBC, ChaCha20-Poly1305, XChaCha20-Poly1305, ARIA-256-GCM, Twofish, Serpent, Camellia, CAST6, RC6, SM4, GOST, SEED, Blowfish, IDEA, CAST5, TEA, and XTEA.
 
 **Open-Source Transparency**
 
