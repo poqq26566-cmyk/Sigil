@@ -1,14 +1,15 @@
 # SIGIL
 **Open-source zero-trust cryptography & privacy suite with multi-layer encryption**
 
-> [!IMPORTANT]
-> **Development Paused until March 25, 2026 (Academic Exams)**
->
-> I am pausing active development to focus entirely on my Class 11 final exams.
->
-> **The Future:** Work resumes in late March, accelerated by a recent **Emergent Ventures Grant** which will fund the **Native iOS Port** and the massive **Steganography** update.
->
-> **Support:** Critical security patches will still be deployed immediately. For urgent security reports, contact `sigil@animeshvarma.dev`. See you on the other side!
+> [!NOTE]  
+> **Development is Back & Active!**
+> 
+> Sigil is officially back in active development! Accelerated by a recent **Emergent Ventures Grant**, development has resumed with incredible momentum as we head towards the massive **v0.5.0 Steganography** update.
+> 
+> **What's Next:**
+> * **v0.5.0 (Android):** Expect rapid shipping of features and fixes on the `dev` branch. Track progress on the [v0.5.0 Roadmap](https://github.com/users/Animesh-Varma/projects/2).
+> * **Native iOS Port:** Coming soon in a dedicated repository (`Sigil-iOS`). The `v0.1.0` iOS release will closely follow the launch of Android `v0.5.0`.
+> * **Alpha Testing:** Want early access to bleeding-edge v0.5.0 builds? Email `sigil@animeshvarma.dev` to receive early signed Alpha APKs!
 
 [![Version](https://img.shields.io/badge/Version-v0.4.5-blue?style=flat-square&logo=android)](https://github.com/Animesh-Varma/Sigil/releases)
 [![License](https://img.shields.io/github/license/Animesh-Varma/Sigil?style=flat-square&color=green)](https://github.com/Animesh-Varma/Sigil/blob/master/LICENSE)
