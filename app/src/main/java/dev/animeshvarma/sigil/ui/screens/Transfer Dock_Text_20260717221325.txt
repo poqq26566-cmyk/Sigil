@@ -1,0 +1,925 @@
+package dev.animeshvarma.sigil.ui.screens
+
+import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollFactory
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import dev.animeshvarma.sigil.SigilViewModel
+import dev.animeshvarma.sigil.crypto.CryptoEngine
+import dev.animeshvarma.sigil.model.AlgorithmRegistry
+import dev.animeshvarma.sigil.model.EncryptionProfile
+import dev.animeshvarma.sigil.model.SigilMode
+import dev.animeshvarma.sigil.model.UiState
+import dev.animeshvarma.sigil.ui.components.SecurePasswordInput
+import dev.animeshvarma.sigil.ui.components.SigilButtonGroup
+import dev.animeshvarma.sigil.ui.components.StyledLayerContainer
+import dev.animeshvarma.sigil.ui.theme.AnimationConfig
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+@Suppress("AssignedValueIsNeverRead")
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun CustomEncryptionScreen(viewModel: SigilViewModel, uiState: UiState) {
+    val context = LocalContext.current
+    var showAddLayerSheet by remember { mutableStateOf(false) }
+    var showSaveProfileDialog by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf<EncryptionProfile?>(null) }
+
+    var showRawSecurityWarning by remember { mutableStateOf(false) }
+    var pendingSaveData by remember { mutableStateOf<PendingProfileData?>(null) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                showAddLayerSheet = false
+                showSaveProfileDialog = false
+                showOverwriteDialog = null
+                showRawSecurityWarning = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    val listState = rememberLazyListState()
+    val vaultEntries by viewModel.vaultEntries.collectAsState()
+
+    val spaceBetweenTopSections = 16.dp
+    val spaceLayersToInput = 10.dp
+    val spaceInputToPass = 10.dp
+    val spacePassToButtons = 17.dp
+    val spaceButtonsToOutput = 8.dp
+
+    val editingProfile = remember(uiState.editingProfileId) {
+        uiState.editingProfileId?.let { viewModel.getProfileById(it) }
+    }
+
+    Column(modifier = Modifier.fillMaxHeight()) {
+        Spacer(modifier = Modifier.height(7.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("压缩", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+            Switch(
+                checked = uiState.isCompressionEnabled,
+                onCheckedChange = { viewModel.toggleCompression(it) },
+                modifier = Modifier.scale(0.8f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(spaceBetweenTopSections))
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("加密层叠", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Row {
+                    SmallFloatingActionButton(
+                        onClick = {
+                            showSaveProfileDialog = true
+                        },
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        elevation = FloatingActionButtonDefaults.elevation(0.dp),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        val icon = if (uiState.editingProfileId != null) Icons.Default.Edit else Icons.Default.Save
+                        Icon(icon, "保存配置", modifier = Modifier.size(16.dp))
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    SmallFloatingActionButton(
+                        onClick = { showAddLayerSheet = true },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        elevation = FloatingActionButtonDefaults.elevation(0.dp),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Add, "添加层", modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            val showFadingEdge = uiState.customLayers.size > 3
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 180.dp)
+                    .then(if (showFadingEdge) Modifier.verticalFadingEdge() else Modifier)
+            ) {
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .simpleVerticalScrollbar(listState)
+                ) {
+                    itemsIndexed(
+                        items = uiState.customLayers,
+                        key = { _, entry -> entry.id }
+                    ) { index, entry ->
+
+                        val scale = remember { Animatable(1f) }
+                        val elevation = remember { Animatable(0f) }
+                        val scope = rememberCoroutineScope()
+
+                        fun triggerPopEffect() {
+                            scope.launch {
+                                launch { scale.animateTo(1.05f, spring(dampingRatio = 0.6f, stiffness = 400f)) }
+                                launch { elevation.animateTo(8f, spring(dampingRatio = 0.6f, stiffness = 400f)) }
+                            }
+                            scope.launch {
+                                delay(150)
+                                launch { scale.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 400f)) }
+                                launch { elevation.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 400f)) }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .animateItem(
+                                    placementSpec = spring(
+                                        stiffness = AnimationConfig.STIFFNESS,
+                                        dampingRatio = AnimationConfig.DAMPING
+                                    )
+                                )
+                                .zIndex(if (scale.value > 1f) 1f else 0f)
+                                .graphicsLayer {
+                                    scaleX = scale.value
+                                    scaleY = scale.value
+                                    shadowElevation = elevation.value
+                                }
+                        ) {
+                            MovableLayerItem(
+                                index = index,
+                                total = uiState.customLayers.size,
+                                name = entry.algorithm.name.replace("_", "-"),
+                                onMoveUp = {
+                                    triggerPopEffect()
+                                    viewModel.moveLayer(index, index - 1)
+                                },
+                                onMoveDown = {
+                                    triggerPopEffect()
+                                    viewModel.moveLayer(index, index + 1)
+                                },
+                                onDelete = { viewModel.removeLayer(index) }
+                            )
+                        }
+                    }
+                }
+
+                if (uiState.customLayers.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            "未选择任何加密层。",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(spaceLayersToInput))
+
+        OutlinedTextField(
+            value = uiState.customInput,
+            onValueChange = { viewModel.onInputTextChanged(it) },
+            label = { Text("输入文本") },
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            )
+        )
+
+        Spacer(modifier = Modifier.height(spaceInputToPass))
+
+        SecurePasswordInput(
+            value = uiState.customPassword,
+            onValueChange = { viewModel.onPasswordChanged(it) },
+            onSaveRequested = { name ->
+                viewModel.saveToVault(alias = name, password = uiState.customPassword)
+            },
+            vaultEntries = vaultEntries,
+            onEntrySelected = { viewModel.loadFromVault(it) },
+            modifier = Modifier.fillMaxWidth().height(64.dp)
+        )
+
+        Spacer(modifier = Modifier.height(spacePassToButtons))
+
+        SigilButtonGroup(
+            onLogs = { viewModel.onLogsClicked() },
+            onEncrypt = { viewModel.onEncrypt() },
+            onDecrypt = { viewModel.onDecrypt() }
+        )
+
+        Spacer(modifier = Modifier.height(spaceButtonsToOutput))
+
+        OutlinedTextField(
+            value = uiState.customOutput,
+            onValueChange = {},
+            label = { Text("输出") },
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth().height(100.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+            ),
+            trailingIcon = {
+                Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
+                    IconButton(onClick = {
+                        if (uiState.customOutput.isNotEmpty()) {
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, uiState.customOutput)
+                                type = "text/plain"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, "分享加密消息")
+                            context.startActivity(shareIntent)
+                            viewModel.addLog("已打开分享面板。")
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "分享",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(onClick = {
+                        if (uiState.customOutput.isNotEmpty()) {
+                            viewModel.copyToClipboardSecurely(uiState.customOutput, "印记输出")
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "复制",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (showAddLayerSheet) {
+        ModalBottomSheet(onDismissRequest = { showAddLayerSheet = false }) {
+            AddLayerSheetContent(
+                onAdd = { algos ->
+                    viewModel.addLayers(algos)
+                    showAddLayerSheet = false
+                }
+            )
+        }
+    }
+
+    if (showSaveProfileDialog) {
+        val defaultKdf = viewModel.getPrefs().let { CryptoEngine.KdfConfig(it.kdfIterations, it.kdfMemoryPow2, it.kdfParallelism) }
+        val initialName = editingProfile?.name ?: ""
+        val initialDesc = editingProfile?.description ?: ""
+        val initialKdfOverride = editingProfile?.kdfConfig
+        val initialIsRaw = editingProfile?.isRaw ?: false
+
+        SaveProfileDialog(
+            initialName = initialName,
+            initialDescription = initialDesc,
+            initialKdfOverride = initialKdfOverride,
+            defaultKdf = defaultKdf,
+            initialIsRaw = initialIsRaw,
+            layerCount = uiState.customLayers.size,
+            onDismiss = { showSaveProfileDialog = false },
+            onSave = { name, desc, kdfOverride, isRaw ->
+                val currentAlgo = uiState.customLayers.firstOrNull()?.algorithm
+                val isUnsafeRaw = isRaw &&
+                        uiState.customLayers.size == 1 &&
+                        currentAlgo != null &&
+                        !CryptoEngine.isAEAD(currentAlgo)
+
+                val performSave = {
+                    if (editingProfile != null) {
+                        viewModel.updateExistingProfile(
+                            id = editingProfile.id,
+                            name = name,
+                            description = desc,
+                            layers = uiState.customLayers.map { it.algorithm },
+                            kdfOverride = kdfOverride,
+                            compress = uiState.isCompressionEnabled,
+                            isRaw = isRaw,
+                            onSuccess = {
+                                showSaveProfileDialog = false
+                                viewModel.onModeSelected(SigilMode.AUTO)
+                            }
+                        )
+                    } else {
+                        viewModel.saveProfile(
+                            name = name,
+                            description = desc,
+                            layers = uiState.customLayers.map { it.algorithm },
+                            kdfOverride = kdfOverride,
+                            compress = uiState.isCompressionEnabled,
+                            isRaw = isRaw,
+                            onSuccess = {
+                                showSaveProfileDialog = false
+                                viewModel.onModeSelected(SigilMode.AUTO)
+                            },
+                            onDuplicateName = { existing ->
+                                showSaveProfileDialog = false
+                                pendingSaveData = PendingProfileData(name, desc, kdfOverride, isRaw)
+                                showOverwriteDialog = existing
+                            }
+                        )
+                    }
+                }
+
+                if (isUnsafeRaw) {
+                    pendingSaveData = PendingProfileData(name, desc, kdfOverride, true)
+                    showRawSecurityWarning = true
+                    showSaveProfileDialog = false
+                } else {
+                    performSave()
+                }
+            }
+        )
+    }
+
+    if (showRawSecurityWarning) {
+        val algoName = uiState.customLayers.firstOrNull()?.algorithm?.name ?: "未知"
+        AlertDialog(
+            onDismissRequest = { showRawSecurityWarning = false },
+            icon = { Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("安全警告") },
+            text = {
+                Text(
+                    "原始模式使用 $algoName 但缺少完整性校验（无 MAC）。\n\n" +
+                            "数据被篡改将无法被检测到。\n\n" +
+                            "您确定要继续，还是返回使用标准加密链？"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingSaveData?.let { data ->
+                            if (editingProfile != null) {
+                                viewModel.updateExistingProfile(
+                                    id = editingProfile.id,
+                                    name = data.name,
+                                    description = data.desc,
+                                    layers = uiState.customLayers.map { it.algorithm },
+                                    kdfOverride = data.kdf,
+                                    compress = uiState.isCompressionEnabled,
+                                    isRaw = data.isRaw,
+                                    onSuccess = {
+                                        viewModel.onModeSelected(SigilMode.AUTO)
+                                    }
+                                )
+                            } else {
+                                viewModel.saveProfile(
+                                    name = data.name,
+                                    description = data.desc,
+                                    layers = uiState.customLayers.map { it.algorithm },
+                                    kdfOverride = data.kdf,
+                                    compress = uiState.isCompressionEnabled,
+                                    isRaw = true,
+                                    onSuccess = {
+                                        viewModel.onModeSelected(SigilMode.AUTO)
+                                    },
+                                    onDuplicateName = { existing ->
+                                        showOverwriteDialog = existing
+                                    }
+                                )
+                            }
+                        }
+                        showRawSecurityWarning = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("继续（不安全）") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showRawSecurityWarning = false
+                    }
+                ) { Text("取消") }
+            }
+        )
+    }
+
+    showOverwriteDialog?.let { existing ->
+        AlertDialog(
+            onDismissRequest = { showOverwriteDialog = null },
+            icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("配置已存在") },
+            text = { Text("名为「${existing.name}」的配置已存在。是否覆盖？") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val data = pendingSaveData
+                        val updated = existing.copy(
+                            name = data?.name ?: existing.name,
+                            description = data?.desc ?: existing.description,
+                            layers = uiState.customLayers.map { it.algorithm },
+                            kdfConfig = data?.kdf ?: existing.kdfConfig,
+                            isRaw = data?.isRaw ?: existing.isRaw,
+                            isCompressionEnabled = uiState.isCompressionEnabled
+                        )
+                        viewModel.overwriteProfile(updated)
+                        showOverwriteDialog = null
+                        viewModel.onModeSelected(SigilMode.AUTO)
+                        pendingSaveData = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("覆盖") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOverwriteDialog = null }) { Text("取消") }
+            }
+        )
+    }
+}
+
+private data class PendingProfileData(
+    val name: String,
+    val desc: String,
+    val kdf: CryptoEngine.KdfConfig?,
+    val isRaw: Boolean
+)
+
+@Composable
+fun SaveProfileDialog(
+    initialName: String = "",
+    initialDescription: String = "",
+    initialKdfOverride: CryptoEngine.KdfConfig?,
+    defaultKdf: CryptoEngine.KdfConfig,
+    initialIsRaw: Boolean = false,
+    layerCount: Int,
+    onDismiss: () -> Unit,
+    onSave: (String, String, CryptoEngine.KdfConfig?, Boolean) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var description by remember { mutableStateOf(initialDescription) }
+
+    var useCustomKdf by remember { mutableStateOf(initialKdfOverride != null) }
+    val effectiveKdf = initialKdfOverride ?: defaultKdf
+
+    var kdfIter by remember { mutableFloatStateOf(effectiveKdf.iterations.toFloat()) }
+    var kdfMem by remember { mutableFloatStateOf(effectiveKdf.memoryPow2.toFloat()) }
+    var kdfPar by remember { mutableFloatStateOf(effectiveKdf.parallelism.toFloat()) }
+
+    var useRawMode by remember { mutableStateOf(initialIsRaw) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initialName.isEmpty()) "保存配置" else "编辑配置") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 20) name = it },
+                    label = { Text("配置名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { if (it.length <= 50) description = it },
+                    label = { Text("简短描述") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (layerCount == 1) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (useRawMode) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                            .clickable { useRawMode = !useRawMode }
+                            .padding(4.dp)
+                    ) {
+                        Checkbox(checked = useRawMode, onCheckedChange = { useRawMode = it })
+                        Column {
+                            Text("原始模式", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(
+                                "仅原始输出，无元数据。\n" +
+                                        "不支持自动解密，需手动选择配置方案。",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = if (useCustomKdf) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { useCustomKdf = !useCustomKdf }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp)
+                    ) {
+                        Checkbox(checked = useCustomKdf, onCheckedChange = { useCustomKdf = it })
+                        Column {
+                            Text(
+                                "覆盖密钥派生参数（KDF）",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "精细调整安全性与性能的平衡。\n" +
+                                        "不支持自动解密，需手动匹配配置。",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = useCustomKdf) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
+                        ) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            Text("迭代次数：${kdfIter.toInt()}", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfIter, onValueChange = { kdfIter = it }, valueRange = 1f..32f)
+
+                            Text("内存：${(1 shl kdfMem.toInt()) / 1024} MB", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfMem, onValueChange = { kdfMem = it }, valueRange = 12f..18f)
+
+                            Text("并行度：${kdfPar.toInt()}", style = MaterialTheme.typography.labelSmall)
+                            Slider(value = kdfPar, onValueChange = { kdfPar = it }, valueRange = 1f..8f)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val kdfConfig = if (useCustomKdf) {
+                        CryptoEngine.KdfConfig(kdfIter.toInt(), kdfMem.toInt(), kdfPar.toInt())
+                    } else null
+                    onSave(name, description, kdfConfig, useRawMode)
+                },
+                enabled = name.isNotBlank() && layerCount > 0
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+fun MovableLayerItem(
+    index: Int,
+    total: Int,
+    name: String,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDelete: () -> Unit
+) {
+    StyledLayerContainer(modifier = Modifier.padding(2.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "层 ${index + 1}：$name",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onMoveUp, enabled = index > 0, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.KeyboardArrowUp, null, tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant else Color.Transparent)
+                }
+                IconButton(onClick = onMoveDown, enabled = index < total - 1, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = if (index < total - 1) MaterialTheme.colorScheme.onSurfaceVariant else Color.Transparent)
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(20.dp)) {
+                    Icon(Icons.Default.Delete, "删除", tint = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AddLayerSheetContent(onAdd: (List<CryptoEngine.Algorithm>) -> Unit) {
+    var searchQuery by remember { mutableStateOf("") }
+    var searchDescription by remember { mutableStateOf(false) }
+    var selectedAlgos by remember { mutableStateOf(setOf<CryptoEngine.Algorithm>()) }
+    val allAlgos = AlgorithmRegistry.supportedAlgorithms
+    val focusManager = LocalFocusManager.current
+
+    val filteredAlgos = remember(searchQuery, searchDescription, allAlgos) {
+        allAlgos.filter { algo ->
+            val nameMatch = algo.name.contains(searchQuery, ignoreCase = true)
+            if (searchDescription) nameMatch || algo.description.contains(searchQuery, ignoreCase = true) else nameMatch
+        }
+    }
+
+    Column(modifier = Modifier.padding(top = 16.dp)) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("添加加密层", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+            val interactionSource = remember { MutableInteractionSource() }
+            val isPressed by interactionSource.collectIsPressedAsState()
+            val scale by animateFloatAsState(if (isPressed) 0.9f else 1f, label = "ButtonBounce")
+
+            Button(
+                onClick = { onAdd(selectedAlgos.toList()) },
+                enabled = selectedAlgos.isNotEmpty(),
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                interactionSource = interactionSource,
+                modifier = Modifier
+                    .height(32.dp)
+                    .scale(scale)
+            ) {
+                Text(text = "添加${if (selectedAlgos.isNotEmpty()) "（${selectedAlgos.size}）" else ""}", fontSize = 13.sp)
+            }
+        }
+
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("搜索（例如 AES、Serpent）...") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = { IconButton(onClick = { focusManager.clearFocus() }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "完成") } },
+                modifier = Modifier.fillMaxWidth(),
+                shape = CircleShape,
+                singleLine = true
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { searchDescription = !searchDescription }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Switch(checked = searchDescription, onCheckedChange = { searchDescription = it }, modifier = Modifier.scale(0.7f))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("在搜索中包含描述", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(modifier = Modifier.weight(1f)) {
+            CompositionLocalProvider(
+                LocalOverscrollFactory provides null
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
+                ) {
+                    items(
+                        items = filteredAlgos,
+                        key = { it.id }
+                    ) { algoData ->
+                        val engineEnum = runCatching { CryptoEngine.Algorithm.valueOf(algoData.id) }.getOrNull()
+                            ?: return@items
+                        val isSelected = selectedAlgos.contains(engineEnum)
+                        val isWeak = algoData.isWeak
+                        val containerColor = when {
+                            isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                            isWeak -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerLow
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = containerColor
+                        ) {
+                            ListItem(
+                                headlineContent = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            algoData.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isWeak) {
+                                            Spacer(Modifier.width(8.dp))
+                                            Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                supportingContent = {
+                                    Column {
+                                        Text(algoData.description)
+                                        if (isWeak) {
+                                            Text(algoData.securityWarning ?: "弱加密算法", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                },
+                                trailingContent = {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            selectedAlgos = if (checked) selectedAlgos + engineEnum else selectedAlgos - engineEnum
+                                        }
+                                    )
+                                },
+                                modifier = Modifier.clickable {
+                                    selectedAlgos = if (isSelected) selectedAlgos - engineEnum else selectedAlgos + engineEnum
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                            )
+                        }
+                    }
+
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp, bottom = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            HorizontalDivider(
+                                modifier = Modifier.width(40.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "— 列表结束 —",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Modifier.simpleVerticalScrollbar(
+    state: LazyListState,
+    width: Dp = 4.dp
+): Modifier {
+    val targetAlpha = if (state.isScrollInProgress) 1f else 0f
+    val duration = if (state.isScrollInProgress) 150 else 500
+
+    val alpha by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = duration)
+    )
+
+    return drawWithContent {
+        drawContent()
+
+        val needDrawScrollbar = state.isScrollInProgress || alpha > 0.0f
+
+        if (needDrawScrollbar) {
+            val totalItems = state.layoutInfo.totalItemsCount
+            if (totalItems == 0) return@drawWithContent
+
+            val elementHeight = this.size.height / totalItems
+            val firstVisibleElementIndex = state.firstVisibleItemIndex
+            val visibleItemsCount = state.layoutInfo.visibleItemsInfo.size
+
+            val scrollbarOffsetY = firstVisibleElementIndex * elementHeight
+            val scrollbarHeight = visibleItemsCount * elementHeight
+
+            drawRoundRect(
+                color = Color.Gray.copy(alpha = 0.5f * alpha),
+                topLeft = Offset(this.size.width - width.toPx(), scrollbarOffsetY),
+                size = Size(width.toPx(), scrollbarHeight),
+                cornerRadius = CornerRadius(width.toPx() / 2)
+            )
+        }
+    }
+}
+
+fun Modifier.verticalFadingEdge(): Modifier = this
+    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+    .drawWithContent {
+        drawContent()
+        val fadeHeight = 40.dp.toPx()
+        val height = size.height
+
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(Color.Black, Color.Transparent),
+                startY = height - fadeHeight,
+                endY = height
+            ),
+            blendMode = BlendMode.DstIn
+        )
+    }
