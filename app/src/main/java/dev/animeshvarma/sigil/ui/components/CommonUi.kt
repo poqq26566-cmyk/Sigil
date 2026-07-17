@@ -30,13 +30,13 @@ fun UnderConstructionView() {
     ) {
         Icon(
             imageVector = Icons.Default.Build,
-            contentDescription = "Under Construction",
+            contentDescription = "开发中",
             modifier = Modifier.size(96.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = "Under construction, stay tuned!",
+            text = "开发中，敬请期待！",
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -73,7 +73,7 @@ fun LogsDialog(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Logs",
+                    text = "日志",
                     fontSize = 24.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -111,7 +111,7 @@ fun LogsDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy Logs",
+                            contentDescription = "复制日志",
                             tint = Color.Gray,
                             modifier = Modifier.size(16.dp)
                         )
@@ -126,10 +126,10 @@ fun LogsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onClear) {
-                        Text("Clear Trace", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                        Text("清空日志", color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
                     }
                     TextButton(onClick = onDismiss) {
-                        Text("Close", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("关闭", fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
