@@ -31,9 +31,8 @@ fun SigilButtonGroup(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
 
-        // 1. Logs (Outlined Look - slightly narrower base weight)
         BounceablePill(
-            text = "Logs",
+            text = "日志",
             onClick = onLogs,
             containerColor = Color.Transparent,
             contentColor = MaterialTheme.colorScheme.primary,
@@ -41,9 +40,8 @@ fun SigilButtonGroup(
             baseWeight = 0.65f
         )
 
-        // 2. Encrypt (Primary Look)
         BounceablePill(
-            text = "Encrypt",
+            text = "加密",
             onClick = onEncrypt,
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -51,9 +49,8 @@ fun SigilButtonGroup(
             baseWeight = 1f
         )
 
-        // 3. Decrypt (Tonal Look)
         BounceablePill(
-            text = "Decrypt",
+            text = "解密",
             onClick = onDecrypt,
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
