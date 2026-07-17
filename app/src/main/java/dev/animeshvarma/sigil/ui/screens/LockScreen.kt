@@ -35,18 +35,6 @@ import dev.animeshvarma.sigil.model.LockMode
 import dev.animeshvarma.sigil.model.LockType
 import dev.animeshvarma.sigil.util.BiometricHelper
 
-/**
- * Render the Sigil lock screen and manage PIN and biometric authentication flows.
- *
- * This composable displays either a PIN/password entry UI or a biometric unlock button depending on
- * the configured lock mode and runtime state, verifies PIN via the provided ViewModel,
- * triggers biometric prompts (including automatic prompt on lifecycle resume when applicable),
- * and shows dialogs for biometric invalidation and emergency reset. On successful authentication
- * it invokes the provided unlock callback.
- *
- * @param viewModel The SigilViewModel used to read preferences, verify the app secret, and perform data wipe.
- * @param onUnlock Callback invoked when authentication succeeds (PIN verified or biometric success).
- */
 @Composable
 fun LockScreen(
     viewModel: SigilViewModel,
@@ -62,7 +50,7 @@ fun LockScreen(
     val lockMode = prefs.lockMode
     val lockType = prefs.lockType
 
-    val incorrectAuthText = if (lockType == LockType.PIN) "Incorrect PIN" else "Incorrect Password"
+    val incorrectAuthText = if (lockType == LockType.PIN) "PIN 码错误" else "密码错误"
 
     var pinInput by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
@@ -71,11 +59,10 @@ fun LockScreen(
     var showWipeDialog by remember { mutableStateOf(false) }
     var showBiometricInvalidatedDialog by remember { mutableStateOf(false) }
 
-    // Helper to trigger bio
     fun triggerBiometric() {
         if (context is FragmentActivity) {
             val currentLockType = prefs.lockType
-            val negativeText = if (currentLockType == LockType.PIN) "Use Sigil PIN" else "Use Sigil Password"
+            val negativeText = if (currentLockType == LockType.PIN) "使用印记 PIN" else "使用印记密码"
 
             BiometricHelper.showPrompt(
                 activity = context,
@@ -153,14 +140,14 @@ fun LockScreen(
             Spacer(Modifier.height(32.dp))
 
             Text(
-                "Sigil Locked",
+                "印记已锁定",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Identity verification required.",
+                "需要验证身份。",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
@@ -168,7 +155,7 @@ fun LockScreen(
 
             if (lockMode == LockMode.CUSTOM || isPinFallback || showBiometricInvalidatedDialog) {
                 val kbType = if (lockType == LockType.PIN) KeyboardType.NumberPassword else KeyboardType.Password
-                val labelText = if (lockType == LockType.PIN) "Enter Sigil PIN" else "Enter Password"
+                val labelText = if (lockType == LockType.PIN) "输入印记 PIN" else "输入密码"
 
                 OutlinedTextField(
                     value = pinInput,
@@ -245,17 +232,16 @@ fun LockScreen(
                             strokeWidth = 3.dp
                         )
                     } else {
-                        Text("Unlock")
+                        Text("解锁")
                     }
                 }
 
-                // Retry Biometrics Button (Only if valid)
                 if (lockMode == LockMode.DEVICE && isPinFallback && !biometricInvalidated) {
                     Spacer(Modifier.height(16.dp))
                     TextButton(onClick = { triggerBiometric() }) {
                         Icon(Icons.Default.Fingerprint, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Try Biometrics Again")
+                        Text("重新尝试生物识别")
                     }
                 }
 
@@ -267,38 +253,36 @@ fun LockScreen(
                 ) {
                     Icon(Icons.Default.LockOpen, null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Unlock with Biometrics")
+                    Text("使用生物识别解锁")
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
             TextButton(onClick = { showWipeDialog = true }) {
-                val forgotText = if (lockType == LockType.PIN) "Forgot PIN? Reset App" else "Forgot Password? Reset App"
+                val forgotText = if (lockType == LockType.PIN) "忘记 PIN？重置应用" else "忘记密码？重置应用"
                 Text(forgotText, color = MaterialTheme.colorScheme.error)
             }
         }
     }
 
-    // --- DIALOGS ---
     if (showBiometricInvalidatedDialog) {
         AlertDialog(
-            onDismissRequest = {
-            },
+            onDismissRequest = { },
             icon = {
                 Icon(Icons.Default.Security, null, tint = MaterialTheme.colorScheme.primary)
             },
             title = {
-                Text("Security Alert")
+                Text("安全提醒")
             },
             text = {
-                val authType = if (lockType == LockType.PIN) "PIN" else "password"
-                Text("A change in your device's biometric settings was detected. \n\nFor your security, Sigil has fallen back to $authType authentication. You will need to re-enable Biometric Unlock in Sigil Settings after logging in.")
+                val authType = if (lockType == LockType.PIN) "PIN" else "密码"
+                Text("检测到设备生物识别设置发生变化。\n\n为确保安全，印记已回退到 $authType 认证。登录后需在印记设置中重新启用生物识别解锁。")
             },
             confirmButton = {
                 TextButton(
                     onClick = { showBiometricInvalidatedDialog = false }
-                ) { Text("I Understand") }
+                ) { Text("我知道了") }
             }
         )
     }
@@ -307,16 +291,16 @@ fun LockScreen(
         AlertDialog(
             onDismissRequest = { showWipeDialog = false },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Emergency Reset") },
-            text = { Text("This will delete ALL data, including your Vault keys, Settings, and PIN. This action is irreversible.") },
+            title = { Text("紧急重置") },
+            text = { Text("此操作将删除所有数据，包括密钥库、设置和 PIN。此操作不可逆。") },
             confirmButton = {
                 Button(
                     onClick = { viewModel.wipeAllData() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Wipe Everything") }
+                ) { Text("清除所有数据") }
             },
             dismissButton = {
-                TextButton(onClick = { showWipeDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showWipeDialog = false }) { Text("取消") }
             }
         )
     }
