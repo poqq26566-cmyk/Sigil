@@ -20,7 +20,7 @@ import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 @Composable
 fun SteganographyScreen() {
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Text", "Photo", "Video")
+    val tabs = listOf("文本", "图片", "视频")
 
     Column(
         modifier = Modifier
@@ -28,7 +28,6 @@ fun SteganographyScreen() {
             .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Standard Tab Selector
         SigilSegmentedControl(
             items = tabs,
             selectedIndex = selectedTabIndex,
@@ -38,7 +37,6 @@ fun SteganographyScreen() {
 
         Spacer(modifier = Modifier.height(15.dp))
 
-        // Animated Content
         Box(modifier = Modifier.fillMaxSize()) {
             val slideSpring = spring<IntOffset>(
                 stiffness = AnimationConfig.STIFFNESS,
@@ -59,9 +57,9 @@ fun SteganographyScreen() {
                 label = "StegoTabTransition"
             ) { tabIndex ->
                 when (tabIndex) {
-                    0 -> UnderConstructionView() // Text
-                    1 -> UnderConstructionView() // Photo
-                    2 -> UnderConstructionView() // Video
+                    0 -> UnderConstructionView()
+                    1 -> UnderConstructionView()
+                    2 -> UnderConstructionView()
                 }
             }
         }
