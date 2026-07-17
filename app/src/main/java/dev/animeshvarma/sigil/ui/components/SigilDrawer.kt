@@ -38,7 +38,7 @@ fun SigilDrawerContent(
                 .padding(vertical = 23.dp, horizontal = 16.dp)
         ) {
             Text(
-                text = "Sigil",
+                text = "印记",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -51,14 +51,14 @@ fun SigilDrawerContent(
                 .padding(horizontal = 12.dp)
         ) {
             DrawerItem(
-                label = "Home",
+                label = "首页",
                 icon = Icons.Default.Home,
                 isSelected = currentScreen == AppScreen.HOME,
                 onClick = { onScreenSelected(AppScreen.HOME) }
             )
 
             DrawerItem(
-                label = "Specialized",
+                label = "专业工具",
                 icon = Icons.Default.EnhancedEncryption,
                 isSelected = false,
                 onClick = { isSpecializedExpanded = !isSpecializedExpanded },
@@ -73,35 +73,35 @@ fun SigilDrawerContent(
             AnimatedVisibility(visible = isSpecializedExpanded) {
                 Column(modifier = Modifier.padding(start = 24.dp)) {
                     DrawerItem(
-                        label = "Steganography",
+                        label = "隐写术",
                         icon = Icons.Default.VisibilityOff,
                         isSelected = currentScreen == AppScreen.STEGANOGRAPHY,
                         onClick = { onScreenSelected(AppScreen.STEGANOGRAPHY) }
                     )
 
                     DrawerItem(
-                        label = "File/Dir Encryption",
+                        label = "文件/目录加密",
                         icon = Icons.Default.Folder,
                         isSelected = currentScreen == AppScreen.FILE_ENCRYPTION,
                         onClick = { onScreenSelected(AppScreen.FILE_ENCRYPTION) }
                     )
 
                     DrawerItem(
-                        label = "Headerless Mode",
+                        label = "无头模式",
                         icon = Icons.Default.Code,
                         isSelected = currentScreen == AppScreen.HEADERLESS,
                         onClick = { onScreenSelected(AppScreen.HEADERLESS) }
                     )
 
                     DrawerItem(
-                        label = "Asymmetric",
+                        label = "非对称加密",
                         icon = Icons.Default.Public,
                         isSelected = currentScreen == AppScreen.ASYMMETRIC,
                         onClick = { onScreenSelected(AppScreen.ASYMMETRIC) }
                     )
 
                     DrawerItem(
-                        label = "Partitions",
+                        label = "分区加密",
                         icon = Icons.Default.Texture,
                         isSelected = currentScreen == AppScreen.PARTITIONS,
                         onClick = { onScreenSelected(AppScreen.PARTITIONS) }
@@ -110,7 +110,7 @@ fun SigilDrawerContent(
             }
 
             DrawerItem(
-                label = "Keystore",
+                label = "密钥库",
                 icon = Icons.Default.Key,
                 isSelected = currentScreen == AppScreen.KEYSTORE,
                 onClick = { onScreenSelected(AppScreen.KEYSTORE) },
@@ -126,19 +126,19 @@ fun SigilDrawerContent(
 
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
             DrawerItem(
-                label = "Donate",
+                label = "捐赠",
                 icon = Icons.Default.VolunteerActivism,
                 isSelected = currentScreen == AppScreen.DONATE,
                 onClick = { onScreenSelected(AppScreen.DONATE) }
             )
             DrawerItem(
-                label = "Docs/Release Notes",
+                label = "文档/版本说明",
                 icon = Icons.AutoMirrored.Filled.Article,
                 isSelected = currentScreen == AppScreen.DOCS,
                 onClick = { onScreenSelected(AppScreen.DOCS) }
             )
             DrawerItem(
-                label = "Settings",
+                label = "设置",
                 icon = Icons.Default.Settings,
                 isSelected = currentScreen == AppScreen.SETTINGS,
                 onClick = { onScreenSelected(AppScreen.SETTINGS) }
