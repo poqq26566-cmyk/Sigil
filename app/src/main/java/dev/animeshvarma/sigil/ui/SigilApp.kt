@@ -36,20 +36,6 @@ import dev.animeshvarma.sigil.ui.screens.SteganographyScreen
 import dev.animeshvarma.sigil.ui.theme.AnimationConfig
 import kotlinx.coroutines.launch
 
-/**
- * Hosts the app's top-level UI, wiring SigilViewModel state to the navigation drawer, header,
- * screen content, loading overlay, and logs dialog.
- *
- * Observes `viewModel.uiState` and:
- * - Renders a ModalNavigationDrawer whose content and open/close state reflect UI state.
- * - Shows a centered header with a menu button that opens the drawer.
- * - Switches main content between app screens with an animated transition.
- * - Overlays a non-interactive loading scrim while a loading flag is set.
- * - Displays an in-app logs dialog when requested.
- *
- * @param modifier Modifier applied to the root container.
- * @param viewModel ViewModel that provides UI state and handles navigation and actions. 
- */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SigilApp(
@@ -61,7 +47,6 @@ fun SigilApp(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // Programmatic Drawer Control (for Demo/Onboarding)
     LaunchedEffect(uiState.isDemoDrawerOpen) {
         if (uiState.isDemoDrawerOpen) {
             drawerState.open()
@@ -69,7 +54,6 @@ fun SigilApp(
             if (drawerState.isOpen) drawerState.close()
         }
     }
-
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -89,7 +73,6 @@ fun SigilApp(
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                // HEADER
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -100,11 +83,11 @@ fun SigilApp(
                         onClick = { scope.launch { drawerState.open() } },
                         modifier = Modifier.align(Alignment.CenterStart)
                     ) {
-                        Icon(Icons.Default.Menu, "Menu", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Default.Menu, "菜单", tint = MaterialTheme.colorScheme.onSurface)
                     }
 
                     val headerTitle = when (uiState.currentScreen) {
-                        AppScreen.HOME, AppScreen.DOCS -> "Sigil"
+                        AppScreen.HOME, AppScreen.DOCS -> "印记"
                         else -> uiState.currentScreen.title
                     }
 
@@ -117,7 +100,6 @@ fun SigilApp(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // CONTENT SWITCHER
                 Box(modifier = Modifier.weight(1f)) {
                     AnimatedContent(
                         targetState = uiState.currentScreen,
@@ -172,7 +154,7 @@ fun SigilApp(
                 onClear = { viewModel.clearLogs() },
                 onCopyLogs = {
                     val fullLog = uiState.logs.joinToString("\n")
-                    viewModel.copyToClipboardSecurely(fullLog, "Sigil Logs")
+                    viewModel.copyToClipboardSecurely(fullLog, "印记日志")
                 }
             )
         }
@@ -187,7 +169,7 @@ fun HomeContent(viewModel: SigilViewModel, uiState: UiState) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         SigilSegmentedControl(
-            items = listOf("Auto", "Custom"),
+            items = listOf("自动", "自定义"),
             selectedIndex = if (uiState.selectedMode == SigilMode.AUTO) 0 else 1,
             onItemSelection = { index ->
                 val newMode = if (index == 0) SigilMode.AUTO else SigilMode.CUSTOM
