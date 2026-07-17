@@ -45,134 +45,134 @@ private data class StepConfig(
     val body: String,
     val next: OnboardingState = OnboardingState.FINISHED,
     val alignment: Alignment = Alignment.BottomCenter,
-    val btnLabel: String = "Next"
+    val btnLabel: String = "下一步"
 )
 
 private val OnboardingState.config: StepConfig
     get() = when (this) {
         OnboardingState.BASIC_INTRO -> StepConfig(
-            "Primary Workspace",
-            "This is the Auto tab, which is divided into three primary components: Input, Password, and Output.",
+            "主要工作区",
+            "这是「自动」标签页，包含三个主要部分：输入、密码和输出。",
             next = OnboardingState.BASIC_PROFILE_EXPLAIN
         )
         OnboardingState.BASIC_PROFILE_EXPLAIN -> StepConfig(
-            "Security Profile",
-            "Use the bookmark icon to switch Encryption Profiles.\n\n• Sigil Chain: Maximum security (Cascaded).\n• Standard AES: Maximum compatibility (Raw Mode).\n\nYou can create your own chains in the Custom tab.",
+            "安全配置方案",
+            "使用书签图标切换加密配置方案。\n\n• 印记链：最高安全性（级联加密）。\n• 标准 AES：最高兼容性（原始模式）。\n\n您可以在「自定义」标签页中创建自己的加密链。",
             next = OnboardingState.BASIC_INPUT
         )
         OnboardingState.BASIC_INPUT -> StepConfig(
-            "1. Input",
-            "Enter your plain text or message into the first field for processing.",
+            "1. 输入",
+            "在第一个输入框中输入明文或消息进行处理。",
             next = OnboardingState.BASIC_PASS
         )
         OnboardingState.BASIC_PASS -> StepConfig(
-            "2. Password",
-            "Secure your message with a strong password here. You can use the visibility icon to verify your input before proceeding.",
+            "2. 密码",
+            "使用强密码保护您的消息。您可以使用可见性图标在操作前检查输入。",
             next = OnboardingState.BASIC_ENCRYPT_WAIT
         )
         OnboardingState.BASIC_ENCRYPT_WAIT -> StepConfig(
-            "3. Execution",
-            "Tapping Encrypt applies the active profile's algorithm chain (e.g., Quad-Layer Cascade).",
+            "3. 执行",
+            "点击「加密」将应用当前配置方案的算法链（例如四层级联）。",
             next = OnboardingState.BASIC_ENCRYPT_DONE,
             alignment = Alignment.TopCenter,
-            btnLabel = "Encrypt"
+            btnLabel = "加密"
         )
         OnboardingState.BASIC_ENCRYPT_DONE -> StepConfig(
-            "Processing...",
-            "The system is processing...\n\nFun Fact: The majority of execution time is consumed by Key Derivation (KDF), not the encryption algorithms themselves.",
+            "处理中...",
+            "系统正在处理...\n\n趣味事实：大部分执行时间消耗在密钥派生（KDF）上，而非加密算法本身。",
             next = OnboardingState.BASIC_OUTPUT,
             alignment = Alignment.TopCenter
         )
         OnboardingState.BASIC_OUTPUT -> StepConfig(
-            "4. Ciphertext",
-            "The resulting output is impossible to break and requires the specific key for decryption.",
+            "4. 密文",
+            "生成的密文无法破解，需要正确的密钥才能解密。",
             next = OnboardingState.DECRYPT_PREP,
             alignment = Alignment.TopCenter
         )
         OnboardingState.DECRYPT_PREP -> StepConfig(
-            "5. Decryption",
-            "To decrypt a message, paste the output directly back into the Input field on this or another device.",
+            "5. 解密",
+            "要解密消息，请将密文粘贴回输入框中（可在本机或其他设备上操作）。",
             next = OnboardingState.DECRYPT_WAIT
         )
         OnboardingState.DECRYPT_WAIT -> StepConfig(
-            "6. Authenticate",
-            "Enter the correct password to authenticate and reveal the original message.",
+            "6. 身份验证",
+            "输入正确的密码进行验证并还原原始消息。",
             next = OnboardingState.DECRYPT_DONE,
-            btnLabel = "Decrypt"
+            btnLabel = "解密"
         )
         OnboardingState.DECRYPT_DONE -> StepConfig(
-            "7. Verification",
-            "Decryption was successful and the original plain text has been restored.",
+            "7. 验证",
+            "解密成功，原始明文已恢复。",
             next = OnboardingState.DRAWER_SHOW,
             alignment = Alignment.TopCenter
         )
         OnboardingState.DRAWER_SHOW -> StepConfig(
-            "Navigation",
-            "You can access additional tools and settings by opening the navigation drawer from the left edge or by tapping the ☰ icon.",
+            "导航",
+            "您可以从左边缘滑出或点击 ☰ 图标打开导航抽屉，访问更多工具和设置。",
             next = OnboardingState.KEYSTORE_NAV
         )
         OnboardingState.KEYSTORE_NAV -> StepConfig(
-            "Keystore Module",
-            "The Key Store manages your saved credentials.",
+            "密钥库模块",
+            "密钥库管理您保存的凭据。",
             next = OnboardingState.KEYSTORE_EXPLAIN
         )
         OnboardingState.KEYSTORE_EXPLAIN -> StepConfig(
-            "Hardware Security",
-            "Keys are stored within the device's hardware-backed Trusted Execution Environment.\n\nFor safety, never transmit the key and the message on the same channel. In-person exchange is the most secure method.",
+            "硬件安全",
+            "密钥存储在设备硬件支持的可信执行环境中。\n\n为安全起见，切勿通过同一渠道传输密钥和消息。面对面交换是最安全的方式。",
             next = OnboardingState.KEYSTORE_USAGE
         )
         OnboardingState.KEYSTORE_USAGE -> StepConfig(
-            "Rapid Access",
-            "You can retrieve these securely saved keys by tapping the key icon inside any password field.",
+            "快速访问",
+            "您可以通过点击密码字段中的钥匙图标来快速调用已保存的密钥。",
             next = OnboardingState.SETTINGS_NAV
         )
         OnboardingState.SETTINGS_NAV -> StepConfig(
-            "Settings",
-            "The Settings panel controls application behavior and security features.",
+            "设置",
+            "设置面板控制应用行为和安全性功能。",
             next = OnboardingState.SETTINGS_EXPLAIN
         )
         OnboardingState.SETTINGS_EXPLAIN -> StepConfig(
-            "Control Panel",
-            "Configure App Lock, Grace Periods, Encryption parameters, and Screen Shield here.\n\nDisabling Material You allows for manual color customization.",
+            "控制面板",
+            "在此配置应用锁、宽松期、加密参数和屏幕保护。\n\n关闭 Material You 后可手动自定义颜色。",
             next = OnboardingState.FORK_SELECTION
         )
         OnboardingState.ADV_CUSTOM_INTRO -> StepConfig(
-            "Custom Workbench",
-            "This interface allows you to construct unique encryption chains.",
+            "自定义工作台",
+            "此界面允许您构建独特的加密链。",
             next = OnboardingState.ADV_CUSTOM_LAYERS
         )
         OnboardingState.ADV_CUSTOM_LAYERS -> StepConfig(
-            "Algorithm Registry",
-            "Select from over 15 industrial-grade algorithms, including AES, Twofish, Camellia, and GOST.",
+            "算法注册表",
+            "从 15 种以上工业级算法中选择，包括 AES、Twofish、Camellia 和 GOST。",
             next = OnboardingState.ADV_CUSTOM_REORDER
         )
         OnboardingState.ADV_CUSTOM_REORDER -> StepConfig(
-            "Sequence Control",
-            "Use the arrow controls to reorder the execution sequence, or add new layers using the add button.",
+            "序列控制",
+            "使用箭头控制调整执行顺序，或使用添加按钮增加新层。",
             next = OnboardingState.ADV_BLOB_EXPLAIN
         )
         OnboardingState.ADV_BLOB_EXPLAIN -> StepConfig(
-            "Container Anatomy",
-            "The output structure combines the Header, Salt, IVs, Ciphertext, and HMAC. Auto Mode parses the header to determine the decryption sequence automatically.",
+            "容器结构",
+            "输出结构包含头部、盐值、初始向量、密文和 HMAC。自动模式通过解析头部自动确定解密顺序。",
             next = OnboardingState.ADV_LOGS_PREP,
             alignment = Alignment.TopCenter
         )
         OnboardingState.ADV_LOGS_PREP -> StepConfig(
-            "System Console",
-            "The system console allows you to audit every encryption step, timing metric, and key derivation in real-time.",
+            "系统控制台",
+            "系统控制台允许您实时审计每个加密步骤、时间指标和密钥派生过程。",
             next = OnboardingState.ADV_LOGS_VIEW,
-            btnLabel = "Open Logs"
+            btnLabel = "打开日志"
         )
         OnboardingState.ADV_LOGS_VIEW -> StepConfig(
-            "Audit Log",
-            "This view displays the raw telemetry data from the cryptographic operation you just performed.",
+            "审计日志",
+            "此视图显示您刚执行的加密操作的原始遥测数据。",
             next = OnboardingState.ADV_RELEASES
         )
         OnboardingState.ADV_RELEASES -> StepConfig(
-            "Transparency",
-            "Review major application updates here, or check the repository for detailed release notes.",
+            "透明度",
+            "在此查看主要应用更新，或访问代码仓库获取详细版本说明。",
             next = OnboardingState.FINISHED,
-            btnLabel = "Finish"
+            btnLabel = "完成"
         )
         OnboardingState.START_SCREEN,
         OnboardingState.FORK_SELECTION,
@@ -189,7 +189,7 @@ fun OnboardingOrchestrator(
     LaunchedEffect(state) {
         delay(100)
         when (state) {
-            OnboardingState.START_SCREEN -> { /* Static */ }
+            OnboardingState.START_SCREEN -> { /* 静态 */ }
             OnboardingState.BASIC_INTRO -> {
                 viewModel.setDemoMode(true)
                 viewModel.onScreenSelected(AppScreen.HOME)
@@ -226,7 +226,7 @@ fun OnboardingOrchestrator(
             OnboardingState.ADV_CUSTOM_INTRO -> {
                 viewModel.onScreenSelected(AppScreen.HOME)
                 viewModel.onModeSelected(SigilMode.CUSTOM)
-                viewModel.injectDemoData("Launch Codes", "RedBattery", "")
+                viewModel.injectDemoData("启动代码", "RedBattery", "")
             }
             OnboardingState.ADV_CUSTOM_REORDER -> {
                 delay(500)
@@ -290,9 +290,9 @@ private fun StartScreen(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Security, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(32.dp))
-            Text("SIGIL", color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("印记", color = MaterialTheme.colorScheme.onBackground, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
-            Text("A Zero-Trust Encryption Environment", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("零信任加密环境", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(64.dp))
 
             Button(
@@ -300,11 +300,11 @@ private fun StartScreen(
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Start Tour")
+                Text("开始引导")
             }
             Spacer(Modifier.height(24.dp))
             TextButton(onClick = onSkip) {
-                Text("Skip Intro", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("跳过引导", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -379,24 +379,24 @@ private fun ForkSelectionScreen(onFinish: () -> Unit, onAdvanced: () -> Unit) {
     ) {
         Icon(Icons.Default.CheckCircle, null, Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(32.dp))
-        Text("Basics Complete", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("基础知识已完成", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         Text(
-            "You know the essentials.\n\n(Note: The Profiles tab onboarding will be added in v0.5.0)",
+            "您已掌握基本操作。\n\n（注意：配置方案选项卡的引导教程将在 v0.5.0 中添加）",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(48.dp))
 
         Button(onClick = onFinish, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
-            Text("Finish & Start App")
+            Text("完成并启动应用")
         }
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onClick = onAdvanced, modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Build, null)
                 Spacer(Modifier.width(16.dp))
-                Text("Show Advanced Details")
+                Text("显示高级详情")
             }
         }
     }
