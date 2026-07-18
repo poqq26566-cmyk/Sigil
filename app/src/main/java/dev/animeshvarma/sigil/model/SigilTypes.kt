@@ -249,5 +249,15 @@ data class UiState(
     val isDemoDropdownExpanded: Boolean = false,
     val isDemoDrawerOpen: Boolean = false,
     val customLayers: List<LayerEntry> = listOf(LayerEntry(algorithm = CryptoEngine.Algorithm.AES_GCM)),
-    val isCompressionEnabled: Boolean = true
+    val isCompressionEnabled: Boolean = true,
+
+    // --- File / Directory Encryption ---
+    val fileSourceUri: String? = null,
+    val fileSourceName: String = "",
+    val fileSourceIsDirectory: Boolean = false,
+    val fileDestTreeUri: String? = null,
+    val fileDestName: String = "",
+    val filePassword: String = "",
+    val fileStatusText: String = "请选择要加密/解密的文件或文件夹。",
+    val fileLastResultName: String? = null
 )
