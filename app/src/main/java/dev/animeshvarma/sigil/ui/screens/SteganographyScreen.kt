@@ -269,7 +269,7 @@ private fun ImageStegoTab() {
             onClick = { pickImageLauncher.launch("image/*") },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(ImageIcon, null, Modifier.size(18.dp))
+            Icon(Icons.Default.ImageIcon, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(if (imageUri == null) "选择图片（建议 PNG，避免有损压缩）" else "重新选择图片")
         }
@@ -331,7 +331,7 @@ private fun ImageStegoTab() {
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(24.dp)
         ) {
-            Icon(if (mode == StegoMode.HIDE) ImageIcon else Icons.Default.Search, null, Modifier.size(18.dp))
+            Icon(if (mode == StegoMode.HIDE) Icons.Default.ImageIcon else Icons.Default.Search, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(if (mode == StegoMode.HIDE) "隐藏并生成图片" else "提取")
         }
