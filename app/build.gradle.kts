@@ -8,19 +8,24 @@ android {
     namespace = "dev.animeshvarma.sigil"
     compileSdk = 36 // Android 16 (Baklava)
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = System.getenv("SIGIL_KEYSTORE_PATH")
+            if (!storeFilePath.isNullOrBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = System.getenv("SIGIL_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SIGIL_KEY_ALIAS")
+                keyPassword = System.getenv("SIGIL_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "dev.animeshvarma.sigil"
         minSdk = 26 // Android 8 (Oreo)
         targetSdk = 36 // Android 16 (Baklava)
-        // Schema: Positional logic (Major*10000 + Minor*100 + Patch).
-        // Ensures strictly increasing, parseable codes (Implemented in v0.4.5).
-        versionCode = 405
-        /* v0.5.0 Scope Split:
-         * - v0.4.5 ships Profiles & Engine updates (Current).
-         * - v0.5.0 defers Steganography & remaining features (Planned).
-         * Context: Maintains consistent update size and monthly cadence.
-         */
-        versionName = "0.4.5"
+        versionCode = 500
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -35,12 +40,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (!System.getenv("SIGIL_KEYSTORE_PATH").isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     dependenciesInfo {
-        // Disables dependency metadata when building APKs (for IzzyOnDroid/F-Droid)
         includeInApk = false
-        // Disables dependency metadata when building Android App Bundles (for Google Play)
         includeInBundle = false
     }
     compileOptions {
@@ -61,14 +67,12 @@ android {
 }
 
 dependencies {
-    // --- Core Android ---
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.activity:activity-compose:1.12.2")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.documentfile:documentfile:1.1.0")
 
-    // --- Compose (UI) ---
     implementation(platform("androidx.compose:compose-bom:2025.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -77,20 +81,15 @@ dependencies {
     implementation("androidx.compose.material:material")
     implementation("androidx.compose.material3:material3:1.5.0-alpha11")
 
-    // --- Logic & Data ---
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
-    // --- Crypto ---
     implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
 
-    // --- Biometric ---
     implementation("androidx.biometric:biometric:1.4.0-alpha05")
 
-    // --- Coroutines ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation(libs.androidx.foundation)
 
-    // --- Testing ---
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
